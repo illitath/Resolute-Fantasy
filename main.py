@@ -1,11 +1,15 @@
 import math
 import time
-
+import os
 from random import random
+import pickle
+from pathlib import Path
+from datetime import datetime
 
 
 from foe import enemies_dict
 from color import Colors
+from language import Language, pad_chinese_text
 from leg import leg_items
 from torso import torso_items
 from weapon import weapon_items
@@ -14,26 +18,27 @@ from hand import hand_items
 from foot import foot_items
 
 all_dicts = [enemies_dict, weapon_items, torso_items, leg_items, hand_items, shield_items, foot_items]
+i18n = Language()
 
 
-energy: int = 25
-level: int = 1
-playerHP: int
-playerAP: int
-playerDP: int
-playerDEX: int
-playerLUC: int
+energy: int = 0
+level: int = 0
+playerHP: int = 0
+playerAP: int = 0
+playerDP: int = 0
+playerDEX: int = 0
+playerLUC: int = 0
 weaponOnUse = weapon_items.get('000')
 torsoOnUse = torso_items.get('000')
 gloveOnUse = hand_items.get('000')
 legOnUse = leg_items.get('000')
 shieldOnUse = shield_items.get('000')
 footOnUse = foot_items.get('000')
-baseHP: int = 100
-baseAP: int = 15
-baseDP: int = 15
-baseDEX: int = 10
-baseLUC: int = 10
+baseHP: int = 0
+baseAP: int = 0
+baseDP: int = 0
+baseDEX: int = 0
+baseLUC: int = 0
 piercingRESIS: float = 0
 slashingRESIS: float = 0
 bludgeoningRESIS: float = 0
@@ -42,7 +47,6 @@ iceRESIS: float = 0
 thunderRESIS: float = 0
 holyRESIS: float = 0
 darkRESIS: float = 0
-resis_count = {'piercing': 0, 'slashing': 0, 'bludgeoning': 0, 'fire': 0, 'ice': 0, 'thunder': 0, 'holy': 0, 'dark': 0}
 
 
 playerACC: int = 0
@@ -50,8 +54,13 @@ playerEVA: int = 0
 SP: int = 0
 EXP: int = 0
 MONEY: int = 0
-criticalChance: float = 0.05
+criticalChance: float = 0.1
 criticalDamage: float = 1.5
+bossDefeated = []
+
+
+allocation_after_battle = True
+languages = 'english'
 
 
 def get_entity_by_id(entity_dict, entity_id):
@@ -166,7 +175,10 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
     current_foe_hp = foe_hp
     player_acc = playerACC
     player_eva = playerEVA
-    print(f'You encountered {foe.name}!')
+    if foe.is_boss:
+        print(i18n.t('You encountered') + f' {i18n.t(foe.name)}! {Colors.RED}(Boss){Colors.END}')
+    else:
+        print(i18n.t('You encountered') + f' {i18n.t(foe.name)}!')
     if foe.bonus == 'BLESS100P':
         acc_eva_multiplier = 2
     elif foe.bonus == 'ULTIMATE':
@@ -183,7 +195,7 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
         eva_rate = 0
     elif eva_rate > 60:
         eva_rate = 60
-    print(f'Hit Rate: {hit_rate}% Dodge Rate: {eva_rate}%')
+    print(i18n.t('Hit Rate:') + f' {hit_rate}% ' + i18n.t('Dodge Rate:') + f' {eva_rate}%')
     if foe.bonus == 'DP100P':
         dp_bonus = 2
     elif foe.bonus == 'ULTIMATE':
@@ -201,12 +213,12 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
     else:
         reduction_rate = round(100 - ((foe_ap + (0.028 * (player_dp * dp_bonus + dp_bonus * foe.foe_level / 5))) * 100 / (foe_ap + (0.557 * (player_dp * dp_bonus + dp_bonus * foe.foe_level / 5)))))
     damage_rate = round((player_ap * ap_bonus + (0.028 * foe_dp)) * 100 / (player_ap * ap_bonus + (0.557 * foe_dp)))
-    print(f'Damage Rate: {damage_rate}% Damage Reduction: {reduction_rate}%')
+    print(i18n.t('Damage Rate:') + f' {damage_rate}% ' + i18n.t('Damage Reduction:') + f' {reduction_rate}%')
     battle_predictor(foe)
     drop_list(foe)
     while True:
         try:
-            user_input = input("Choose:\nF:Fight!\nR:Retreat!").strip()
+            user_input = input(i18n.t("Choose: ") + "\n" + i18n.t("F:Fight!") + "\n" + i18n.t("R:Retreat!")).strip()
             if user_input == 'r':
                 print('________________________________________')
                 return 'retreat'
@@ -214,9 +226,9 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
                 print('________________________________________')
                 break
         except ValueError:
-            print("Please enter R to retreat!")
+            print(i18n.t("Please enter F to fight, or R to retreat!"))
         except KeyboardInterrupt:
-            print("\nProgress cancelled!")
+            print("\n" + i18n.t("Progress cancelled!"))
         break
     sleep_span: float = 1
     for i in range(10000):
@@ -226,30 +238,30 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
             current_foe_hp -= damage
             if is_critical:
                 if elemental_factor == 1:
-                    print(f'You critically hit {foe.name} for {damage}!', end='★')
+                    print(i18n.t('You critically hit') + f' {i18n.t(foe.name)} ' + i18n.t('for') + f' {damage}!', end='★')
                 elif 0 <= elemental_factor < 1:
-                    print(f'You critically hit {foe.name} for {round(100 * (1 - elemental_factor))}% {Colors.WHITE}attenuated{Colors.END} {damage}!', end='★')
+                    print(i18n.t('You critically hit') + f' {i18n.t(foe.name)} ' + i18n.t('for') + f' {round(100 * (1 - elemental_factor))}% {Colors.WHITE} ' + i18n.t('attenuated') + f' {Colors.END} {damage}!', end='★')
                 elif elemental_factor < 0:
-                    print(f'You critically hit {foe.name}, but it {Colors.RED}absorbed{Colors.END} {-damage}!', end='★')
+                    print(i18n.t('You critically hit') + f' {i18n.t(foe.name)}, ' + i18n.t('but it') + f' {Colors.RED}' + i18n.t('absorbed') + f'{Colors.END} {-damage}!', end='★')
                 elif elemental_factor > 1:
-                    print(f'You {Colors.GREEN}devastatingly{Colors.END} hit {foe.name} for {damage}!', end='★')
+                    print(i18n.t('You') + f' {Colors.GREEN}' + i18n.t('devastatingly') + f'{Colors.END} ' + i18n.t('hit') + f' {i18n.t(foe.name)} ' + i18n.t('for') + f' {damage}!', end='★')
             else:
                 if elemental_factor == 1:
-                    print(f'You hit {foe.name} for {damage}!', end=' ')
+                    print(i18n.t('You hit') + f' {i18n.t(foe.name)} ' + i18n.t('for') + f' {damage}!', end=' ')
                 elif 0 <= elemental_factor < 1:
-                    print(f'You hit {foe.name} for {round(100 * (1 - elemental_factor))}% {Colors.WHITE}attenuated{Colors.END} {damage}!', end=' ')
+                    print(i18n.t('You hit') + f' {i18n.t(foe.name)} ' + i18n.t('for') + f' {round(100 * (1 - elemental_factor))}% {Colors.WHITE} ' + i18n.t('attenuated') + f' {Colors.END} {damage}!', end=' ')
                 elif elemental_factor < 0:
-                    print(f'You hit {foe.name}, but it {Colors.RED}absorbed{Colors.END} {-damage}!', end=' ')
+                    print(i18n.t('You hit') + f' {i18n.t(foe.name)}, ' + i18n.t('but it') + f' {Colors.RED}' + i18n.t('absorbed') + f'{Colors.END} {-damage}!', end=' ')
                 elif elemental_factor > 1:
-                    print(f'You hit {foe.name} {Colors.GREEN}powerfully{Colors.END} for {damage}!', end=' ')
+                    print(i18n.t('You hit') + f' {i18n.t(foe.name)} {Colors.GREEN}' + i18n.t('powerfully') + f' {Colors.END}' + i18n.t('for') + f' {damage}!', end=' ')
             print(f'({current_foe_hp}/{foe_hp})')
         else:
-            print(f'You miss! ({current_foe_hp}/{foe_hp})')
+            print(i18n.t('You miss!') + f' ({current_foe_hp}/{foe_hp})')
         if current_foe_hp <= 0:
-            print(f'You have defeated {foe.name}!')
+            print(i18n.t('You have defeated') + f' {i18n.t(foe.name)}!')
             exp = exp_calculator(foe)
             money_calculator(foe)
-            print(f'You gained {exp} exp!')
+            print(i18n.t('You gained') + f' {exp} EXP!')
             level_manager(exp)
             return 'win'
         time.sleep(sleep_span)
@@ -257,20 +269,20 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
             damage, elemental_factor = foe_damage_calculator(foe, player_dp)
             current_player_hp -= damage
             if elemental_factor == 1:
-                print(f'{foe.name} hits you for {damage}!', end=' ')
+                print(f'{i18n.t(foe.name)} ' + i18n.t('hits you for') + f' {damage}!', end=' ')
             elif 0 <= elemental_factor < 1:
-                print(f'{foe.name} hits you for {round(100 * (1 - elemental_factor))}% {Colors.BLUE}attenuated{Colors.END} {damage}!!',
+                print(f'{i18n.t(foe.name)} ' + i18n.t('hits you for') + f' {round(100 * (1 - elemental_factor))}% {Colors.BLUE} ' + i18n.t('attenuated') + f' {Colors.END} {damage}!!',
                       end=' ')
             elif elemental_factor < 0:
-                print(f'You {Colors.GREEN}absorb{Colors.END} {round(-elemental_factor * 100)}% from {foe.name}, recovered {-damage}!!!',
+                print(i18n.t('You') + f' {Colors.GREEN}'+ i18n.t('absorb') + f'{Colors.END} {round(-elemental_factor * 100)}%' + i18n.t('from') + f' {i18n.t(foe.name)}, ' + i18n.t('recovered') + f' {-damage}!!!',
                       end=' ')
             elif elemental_factor > 1:
-                print(f'{foe.name} hits you {Colors.ORANGE}BRUTALLY{Colors.END} for {damage}!', end=' ')
+                print(f'{i18n.t(foe.name)} ' + i18n.t('hits you') + f' {Colors.ORANGE}' + i18n.t('BRUTALLY') + f'{Colors.END} ' + i18n.t('for') + f'{damage}!', end=' ')
             print(f'({current_player_hp} / {player_hp})')
         else:
-            print(f'Nice dodge! ({current_player_hp}/{player_hp})')
+            print(i18n.t('Nice dodge!') + f' ({current_player_hp}/{player_hp})')
         if current_player_hp <= 0:
-            print(f'You lose...')
+            print(i18n.t('You lose...'))
             return 'lose'
         time.sleep(sleep_span)
         if i < 11:
@@ -291,7 +303,7 @@ def foe_ap_calculator(foe):
         multiplier = 1.2
     else:
         multiplier = 1
-    foe_ap: int = math.floor((10 + 2 * foe.foe_level + math.floor(foe.foe_level ** 1.1)) * multiplier) + foe.foe_ap_modifier
+    foe_ap: int = math.floor((10 + 1.6 * foe.foe_level + math.floor(foe.foe_level ** 1.1)) * multiplier) + foe.foe_ap_modifier
     return foe_ap
 
 
@@ -309,7 +321,7 @@ def foe_hp_calculator(foe):
         multiplier = 1.2
     else:
         multiplier = 1
-    foe_hp: int = math.floor((75 + 25 * foe.foe_level + foe.foe_level ** 1.3) * multiplier + foe.foe_hp_modifier)
+    foe_hp: int = math.floor((75 + 20 * foe.foe_level + foe.foe_level ** 1.3) * multiplier + foe.foe_hp_modifier)
     return foe_hp
 
 
@@ -391,26 +403,44 @@ def level_manager(exp):
             total_exp_used += exp_needed
         EXP -= total_exp_used
         level_up = max_level - level
-        print(f'LV {level_up} UP !! LV{level}--->LV{max_level} ({EXP}/{int(10 + max_level ** 1.6)})!!')
+        print(f'LV {level_up} ' + i18n.t('UP') + f' !! LV{level}--->LV{max_level} ({EXP}/{int(10 + max_level ** 1.6)})!!')
         level = max_level
-        print(f'{5 * level_up} SP Gained!')
+        print(f'{Colors.GREEN}{5 * level_up} ◆{Colors.END} ' + i18n.t('Gained!'))
         SP += 5 * level_up
     level = max_level
 
 
 def point_allocator():
-    global baseHP, baseAP, baseDP, baseDEX, baseLUC, SP
-    if SP <= 0:
-        print("No SP available!")
-        return
+    global baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, allocation_after_battle
     while True:
         try:
-            user_input = input("Please enter your allocation strategy(1 1 0 0 0,etc):").strip()
+            print(i18n.t('Current:') + f'{Colors.GREEN}{SP} ◆{Colors.END}')
+            print("=" * 30)
+            print(i18n.t("(1 1 0 0 0,etc): Allocation strategy"))
+            print(i18n.t("2: Toggle allocation after battle, current:") + f" {allocation_after_battle}")
+            print(i18n.t("3: RETURN"))
+            print("=" * 30)
+            user_input = input("Choose: ").strip()
+            if user_input == '2' and allocation_after_battle:
+                allocation_after_battle = False
+                print(i18n.t('Allocation after battle disabled!'))
+                save_manager.save_game()
+                continue
+            elif user_input == '2' and not allocation_after_battle:
+                allocation_after_battle = True
+                print(i18n.t('Allocation after battle enabled!'))
+                save_manager.save_game()
+                continue
+            elif user_input == '3':
+                return
+            if SP <= 0:
+                print(i18n.t("No SP available!"))
+                return
             if not user_input:
                 continue
             numbers = list(map(int, user_input.split()))
             if (len(numbers) != 5) or any(n < 0 for n in numbers) or sum(numbers) == 0:
-                print("Invalid number!")
+                print(i18n.t("Please enter valid FORMAT") + f"({Colors.RED}2 1 0 0 0 {Colors.END}" + i18n.t("means 66.6% points for HP and 33.3% for AP, etc)!"))
                 continue
             total_ratio = sum(numbers)
             allocated = 0
@@ -418,26 +448,49 @@ def point_allocator():
             for i in range(5):
                 points_to_assign = math.floor(total_sp * numbers[i] / total_ratio)
                 if i == 0:
-                    baseHP += 4 * points_to_assign
+                    temp_hp = baseHP + 4 * points_to_assign
+                    if not baseHP == temp_hp:
+                        ole_hp = baseHP
+                        baseHP = temp_hp
+                        print(f'HP: {ole_hp}({playerHP}) ----> {Colors.BOLD}{baseHP}({stats_calculator()[0]}){Colors.END}')
                 if i == 1:
-                    baseAP += points_to_assign
+                    temp_ap = baseAP + points_to_assign
+                    if not baseAP == temp_ap:
+                        ole_ap = baseAP
+                        baseAP = temp_ap
+                        print(f'AP: {ole_ap}({playerAP}) ----> {Colors.BOLD}{baseAP}({stats_calculator()[1]}){Colors.END}')
                 if i == 2:
-                    baseDP += points_to_assign
+                    temp_dp = baseDP + points_to_assign
+                    if not baseDP == temp_dp:
+                        ole_dp = baseDP
+                        baseDP = temp_dp
+                        print(f'DP: {ole_dp}({playerDP}) ----> {Colors.BOLD}{baseDP}({stats_calculator()[2]}){Colors.END}')
                 if i == 3:
-                    baseDEX += points_to_assign
+                    temp_dex = baseDEX + points_to_assign
+                    if not baseDEX == temp_dex:
+                        ole_dex = baseDEX
+                        baseDEX = temp_dex
+                        print(f'DEX: {ole_dex}({playerDEX}) ----> {Colors.BOLD}{baseDEX}({stats_calculator()[3]}){Colors.END}')
                 if i == 4:
-                    baseLUC += points_to_assign
+                    temp_luc = baseLUC + points_to_assign
+                    if not baseLUC == temp_luc:
+                        ole_luc = baseLUC
+                        baseLUC = temp_luc
+                        print(f'LUC: {ole_luc}({playerLUC}) ----> {Colors.BOLD}{baseLUC}({stats_calculator()[4]}){Colors.END}')
                 allocated += points_to_assign
                 SP -= points_to_assign
                 if SP <= 0:
                     break
-            print(f'Allocation of {allocated} SP is successful!')
+            refresh_player()
+            print(i18n.t('Allocation of') + f' {Colors.GREEN}{allocated} ◆ {Colors.END}' + i18n.t('is successful!'))
+            save_manager.save_game()
             break
         except ValueError:
-            print("Please enter valid integer!")
+            print(i18n.t("Please enter valid FORMAT") + f"({Colors.RED}2 1 0 0 0 {Colors.END}" + i18n.t("means 66.6% points for HP and 33.3% for AP, etc)!"))
+            continue
         except KeyboardInterrupt:
-            print("\nAllocation cancelled!")
-        break
+            print("\n" + i18n.t("Allocation cancelled!"))
+            continue
 
 
 def money_calculator(foe):
@@ -449,10 +502,10 @@ def money_calculator(foe):
         multiplier = 2
     else:
         multiplier = 1
-    base_money: int = round(75 + foe.foe_level * 5 + foe.foe_level ** 1.25)
+    base_money: int = round(75 + foe.foe_level * 16 + foe.foe_level ** 1.5)
     looted_money: int = math.floor(base_money * money_bonus_multiplier * multiplier * math.log10(playerLUC))
     MONEY += looted_money
-    print(f'Looted {looted_money} money! current money: {MONEY}')
+    print(i18n.t('Looted') + f' {Colors.YELLOW}{looted_money} G{Colors.END}!' + i18n.t("Current:") + f'{Colors.YELLOW}{MONEY} G{Colors.END}')
 
 
 def map_bonus_generator(foe):
@@ -475,19 +528,19 @@ def map_bonus_generator(foe):
 
 def get_map_bonus(foe):
     if foe.bonus == 'EXP100P':
-        print(f'({foe.foe_id}){foe.name} now drops 200% EXP!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('now drops 200% EXP!'))
     elif foe.bonus == 'AP50P':
-        print(f'({foe.foe_id}){foe.name} is fragile!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is fragile!'))
     elif foe.bonus == 'DP100P':
-        print(f'({foe.foe_id}){foe.name} is exhausted!!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is exhausted!'))
     elif foe.bonus == 'MONEY100P':
-        print(f'({foe.foe_id}){foe.name} now drops 200% MONEY!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('now drops 200% MONEY!'))
     elif foe.bonus == 'CRIT30P':
-        print(f'({foe.foe_id}){foe.name} is exposing its weakness!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is exposing its weakness!'))
     elif foe.bonus == 'ULTIMATE':
-        print(f'({foe.foe_id}){foe.name} is at last gasp!!!')
+        print(f'({Colors.YELLOW}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is at last gasp!!!'))
     elif foe.bonus == 'BLESS100P':
-        print(f'({foe.foe_id}){foe.name} is slow in movement!')
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is slow in movement!'))
 
 
 def reset_bonus(foe):
@@ -520,72 +573,76 @@ def battle_predictor(foe):
             if simulated_player_hp <= 0:
                 break
             if i > 5000:
-                print(f"{Colors.PURPLE}The battle will take too much time{Colors.END}")
+                print(f"{Colors.PURPLE}" + i18n.t("The battle will take too much time") + f"{Colors.END}")
                 return
     if win_count > 95:
-        print(f"{Colors.GREEN}Victory is assured!{Colors.END}")
+        print(f"{Colors.GREEN}" + i18n.t("Victory is assured!") + f"{Colors.END}")
     elif win_count > 75:
-        print(f"{Colors.BLUE}You are likely to win this{Colors.END}")
+        print(f"{Colors.BLUE}" + i18n.t("You are likely to win this") + f"{Colors.END}")
     elif win_count > 55:
-        print(f"{Colors.CYAN}This seems like a fair fight{Colors.END}")
+        print(f"{Colors.CYAN}" + i18n.t("This seems like a fair fight") + f"{Colors.END}")
     elif win_count > 25:
-        print(f"{Colors.YELLOW}You face a challenge{Colors.END}")
+        print(f"{Colors.YELLOW}" + i18n.t("You face a challenge") + f"{Colors.END}")
     elif win_count > 5:
-        print(f"{Colors.ORANGE}Your opponent is too powerful{Colors.END}")
+        print(f"{Colors.ORANGE}" + i18n.t("Your opponent is too powerful") + f"{Colors.END}")
     else:
-        print(f"{Colors.RED}The battle looks impossible{Colors.END}")
+        print(f"{Colors.RED}" + i18n.t("The battle looks impossible") + f"{Colors.END}")
 
 
 def switch_to_gear(equipment, item_type):
     global weaponOnUse, torsoOnUse, legOnUse, gloveOnUse, footOnUse, shieldOnUse
-    if item_type == 'w':
+    if item_type == '1':
         temp_element = equipment.element
         if not temp_element == weaponOnUse.element:
-            print(f'weapon element: {weaponOnUse.element}({100 * weaponOnUse.element_percentage}%) ----> {equipment.element}({100 * equipment.element_percentage}%)')
+            print(i18n.t('weapon element:') + f' {weaponOnUse.element}({100 * weaponOnUse.element_percentage}%) ----> {equipment.element}({100 * equipment.element_percentage}%)')
         weaponOnUse = equipment
-    elif item_type == 't':
+    elif item_type == '2':
         torsoOnUse = equipment
-    elif item_type == 'l':
+    elif item_type == '3':
         legOnUse = equipment
-    elif item_type == 'h':
+    elif item_type == '4':
         gloveOnUse = equipment
-    elif item_type == 'f':
-        footOnUse = equipment
-    elif item_type == 's':
+    elif item_type == '5':
         shieldOnUse = equipment
+    elif item_type == '6':
+        footOnUse = equipment
     temp_hp, temp_ap, temp_dp, temp_dex, temp_luc = stats_calculator()
     if not playerHP == temp_hp:
-        print(f'HP: {playerHP} ----> {temp_hp}')
+        print(f'HP: {playerHP} ----> {Colors.BOLD}{temp_hp}{Colors.END}')
     if not playerAP == temp_ap:
-        print(f'AP: {playerAP} ----> {temp_ap}')
+        print(f'AP: {playerAP} ----> {Colors.BOLD}{temp_ap}{Colors.END}')
     if not playerDP == temp_dp:
-        print(f'DP: {playerDP} ----> {temp_dp}')
+        print(f'DP: {playerDP} ----> {Colors.BOLD}{temp_dp}{Colors.END}')
     if not playerDEX == temp_dex:
-        print(f'DEX: {playerDEX} ----> {temp_dex}')
+        print(f'DEX: {playerDEX} ----> {Colors.BOLD}{temp_dex}{Colors.END}')
     if not playerLUC == temp_luc:
-        print(f'LUC: {playerLUC} ----> {temp_luc}')
-    resistance_count = resis_count
+        print(f'LUC: {playerLUC} ----> {Colors.BOLD}{temp_luc}{Colors.END}')
+    resistance_count = {'piercing': 0, 'slashing': 0, 'bludgeoning': 0, 'fire': 0, 'ice': 0, 'thunder': 0, 'holy': 0, 'dark': 0}
     for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
         resistance = item_info.element
         percentage = item_info.element_percentage
         if resistance != 'none':
             resistance_count[resistance] += percentage
     if not resistance_count['piercing'] == piercingRESIS:
-        print(f'piercingRESIS: {100 * piercingRESIS}% ----> {100 * resistance_count['piercing']}%')
+        print(i18n.t('piercingRESIS:') + f' {100 * piercingRESIS}% ----> {100 * resistance_count['piercing']}%')
     if not resistance_count['slashing'] == slashingRESIS:
-        print(f'slashingRESIS: {100 * slashingRESIS}% ----> {100 * resistance_count['slashing']}%')
+        print(i18n.t('slashingRESIS:') + f' {100 * slashingRESIS}% ----> {100 * resistance_count['slashing']}%')
     if not resistance_count['bludgeoning'] == bludgeoningRESIS:
-        print(f'bludgeoningRESIS: {100 * bludgeoningRESIS}% ----> {100 * resistance_count['bludgeoning']}%')
+        print(i18n.t('bludgeoningRESIS:') + f' {100 * bludgeoningRESIS}% ----> {100 * resistance_count['bludgeoning']}%')
     if not resistance_count['fire'] == fireRESIS:
-        print(f'fireRESIS: {100 * fireRESIS}% ----> {100 * resistance_count['fire']}%')
+        print(i18n.t('fireRESIS:') + f' {100 * fireRESIS}% ----> {100 * resistance_count['fire']}%')
     if not resistance_count['ice'] == iceRESIS:
-        print(f'iceRESIS: {100 * iceRESIS}% ----> {100 * resistance_count['ice']}%')
+        print(i18n.t('iceRESIS:') + f' {100 * iceRESIS}% ----> {100 * resistance_count['ice']}%')
     if not resistance_count['thunder'] == thunderRESIS:
-        print(f'thunderRESIS: {100 * thunderRESIS}% ----> {100 * resistance_count['thunder']}%')
+        print(i18n.t('thunderRESIS:') + f' {100 * thunderRESIS}% ----> {100 * resistance_count['thunder']}%')
     if not resistance_count['holy'] == holyRESIS:
-        print(f'holyRESIS: {100 * holyRESIS}% ----> {100 * resistance_count['holy']}%')
+        print(i18n.t('holyRESIS:') + f' {100 * holyRESIS}% ----> {100 * resistance_count['holy']}%')
     if not resistance_count['dark'] == darkRESIS:
-        print(f'darkRESIS: {100 * darkRESIS}% ----> {100 * resistance_count['dark']}%')
+        print(i18n.t('darkRESIS:') + f' {100 * darkRESIS}% ----> {100 * resistance_count['dark']}%')
+    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
+        resistance = item_info.element
+        if resistance != 'none':
+            resistance_count[resistance] = 0
 
 
 def stats_calculator():
@@ -598,9 +655,10 @@ def stats_calculator():
 
 
 def refresh_player():
-    global playerHP, playerAP, playerDP, playerDEX, playerLUC, piercingRESIS, slashingRESIS, bludgeoningRESIS, fireRESIS, iceRESIS, thunderRESIS, holyRESIS, darkRESIS
+    global playerHP, playerAP, playerDP, playerDEX, playerLUC, piercingRESIS, slashingRESIS, bludgeoningRESIS, fireRESIS, iceRESIS, thunderRESIS, holyRESIS, darkRESIS, playerACC, playerEVA
     playerHP, playerAP, playerDP, playerDEX, playerLUC = stats_calculator()
-    resistance_count = resis_count
+    playerACC, playerEVA = dexterity_calculator(playerDEX)
+    resistance_count = {'piercing': 0, 'slashing': 0, 'bludgeoning': 0, 'fire': 0, 'ice': 0, 'thunder': 0, 'holy': 0, 'dark': 0}
     for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
         resistance = item_info.element
         percentage = item_info.element_percentage
@@ -617,7 +675,7 @@ def refresh_player():
 
 
 def drop_manager(foe):
-    drop_chance = 0.12 * (foe.foe_level ** -0.1) * math.log(80 * playerLUC, 800)
+    drop_chance = 0.15 * (foe.foe_level ** -0.1) * math.log(80 * playerLUC, 800)
     if foe.is_boss:
         drop_chance *= 6
     if drop_chance > 1:
@@ -631,17 +689,17 @@ def drop_manager(foe):
             try:
                 if r == 1 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
                     get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten = True
-                    print(f'You got {Colors.UNDERLINE}{foe.drop1}{Colors.END} from {foe.name}!!!')
+                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop1)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
                     return
                 r = 2
                 if r == 2 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
                     get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten = True
-                    print(f'You got {Colors.UNDERLINE}{foe.drop2}{Colors.END} from {foe.name}!!!')
+                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop2)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
                     return
                 r = 3
                 if r == 3 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
                     get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten = True
-                    print(f'You got {Colors.UNDERLINE}{foe.drop3}{Colors.END} from {foe.name}!!!')
+                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop3)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
                     return
                 elif r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
                     continue
@@ -658,7 +716,7 @@ def drop_manager(foe):
 def drop_list(foe):
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
-            print(f'-----------------------\n{foe.drop1} {Colors.GREEN}√{Colors.END}', end=' ')
+            print(f'-----------------------\n{i18n.t(foe.drop1)} {Colors.GREEN}√{Colors.END}', end=' ')
         else:
             print(f'-----------------------\n ???', end='   ')
     except AttributeError:
@@ -666,7 +724,7 @@ def drop_list(foe):
         return
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
-            print(f'{foe.drop2} {Colors.GREEN}√{Colors.END}', end=' ')
+            print(f'{i18n.t(foe.drop2)} {Colors.GREEN}√{Colors.END}', end=' ')
         else:
             print(f' ???', end='   ')
     except AttributeError:
@@ -674,7 +732,7 @@ def drop_list(foe):
         return
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
-            print(f'{foe.drop3} {Colors.GREEN}√{Colors.END}\n-----------------------')
+            print(f'{i18n.t(foe.drop3)} {Colors.GREEN}√{Colors.END}\n-----------------------')
         else:
             print(f' ???\n-----------------------')
     except AttributeError:
@@ -683,10 +741,10 @@ def drop_list(foe):
 
 def show_gear_info(equipment, item_type):
     print('________________________________________')
-    if item_type == 'w':
-        print(f'current: {equipment.name}\nelement: {equipment.element}({100 * equipment.element_percentage}%)')
+    if item_type == '1':
+        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Element:") + f' {equipment.element}({format(equipment.element_percentage, ".0%")})')
     else:
-        print(f'current: {equipment.name}\nresistance: {equipment.element}({100 * equipment.element_percentage}%)')
+        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Resistance:") + f' {equipment.element}({format(equipment.element_percentage, ".0%")})')
     gear_info(equipment)
 
 
@@ -709,15 +767,15 @@ def gear_info(equipment):
                 print(f"LUC+{value} ", end='  ')
         if value2 != 0:
             if i == 1:
-                print(f"HP×{round(100 * (1 + value2))}%")
+                print(f"HP×{format(1 + value2, ".0%")}")
             elif i == 2:
-                print(f"AP×{round(100 * (1 + value2))}%")
+                print(f"AP×{format(1 + value2, ".0%")}")
             elif i == 3:
-                print(f"DP×{round(100 * (1 + value2))}%")
+                print(f"DP×{format(1 + value2, ".0%")}")
             elif i == 4:
-                print(f"DEX×{round(100 * (1 + value2))}%")
+                print(f"DEX×{format(1 + value2, ".0%")}")
             elif i == 5:
-                print(f"LUC×{round(100 * (1 + value2))}%")
+                print(f"LUC×{format(1 + value2, ".0%")}")
         elif value != 0 and value2 == 0:
             print('')
     print('________________________________________')
@@ -726,23 +784,24 @@ def gear_info(equipment):
 def purchase(equipment, item_type):
     global MONEY
     print('________________________________________')
-    print(f'{equipment.name}: {equipment.element}({100 * equipment.element_percentage}%)')
+    print(f'{i18n.t(equipment.name)}: {equipment.element}({format(equipment.element_percentage, ".0%")})')
     gear_info(equipment)
-    target = input(f"Do you want to buy {equipment.name} and equip it immediately? Cost:{equipment.price} Gold:{MONEY}\n[Y/N]")
+    target = input(i18n.t("Do you want to buy") + f' {i18n.t(equipment.name)} ' + i18n.t("and equip it immediately? Cost:") + f"{Colors.YELLOW}{equipment.price} G{Colors.END} " + i18n.t("Gold:") + f"{Colors.YELLOW}{MONEY} G{Colors.END}\n[Y/N]")
+    print("=" * 30)
     if target == 'y' and equipment.price <= MONEY:
         equipment.gotten = True
         MONEY -= equipment.price
         switch_to_gear(equipment, item_type)
-        print(f'Switched to {equipment.name} successfully!')
+        print(i18n.t('Switched to ') + f'{i18n.t(equipment.name)}' + i18n.t(' successfully!'))
     elif target == 'y' and equipment.price > MONEY:
-        print("You don't have enough GOLD!")
+        print(i18n.t("You don't have enough GOLD!"))
     elif target == 'n':
         pass
-    print('________________________________________')
     return
 
 
 def list_gear(item_dict):
+    print(i18n.t('Your GOLD:') + f'{Colors.YELLOW}{MONEY} G{Colors.END}')
     for key in sorted(item_dict.keys()):
         data = item_dict[key]
         if (not data.gotten) and data.price == 0:
@@ -750,11 +809,11 @@ def list_gear(item_dict):
             print(f'({data.num}) ???{blank:15}×| ???')
             continue
         elif (not data.gotten) and data.price != 0:
-            print(f'({data.num}){data.name:19}×|', end='')
+            print(f'({data.num}) {pad_chinese_text(i18n.t(data.name), 19)}×|', end='')
         elif data in [weaponOnUse, legOnUse, torsoOnUse, footOnUse, shieldOnUse, gloveOnUse]:
-            print(f'({data.num}){data.name:19}{Colors.BOLD}E{Colors.END}|', end='')
+            print(f'({data.num}) {pad_chinese_text(i18n.t(data.name), 19)}E|', end='')
         else:
-            print(f'({data.num}){data.name:19}√|', end='')
+            print(f'({data.num}) {pad_chinese_text(i18n.t(data.name), 19)}√|', end='')
         for i in range(1, 6):
             attr_name = f'base_stats{i}'
             attr_name2 = f'multiplier{i}'
@@ -773,20 +832,20 @@ def list_gear(item_dict):
                     print(f"LUC+{value} ", end=' ')
             if value2 != 0:
                 if i == 1:
-                    print(f"HP×{round(100 * (1 + value2))}%", end='  ')
+                    print(f"HP×{format(1 + value2, ".0%")}", end='  ')
                 elif i == 2:
-                    print(f"AP×{round(100 * (1 + value2))}%", end='  ')
+                    print(f"AP×{format(1 + value2, ".0%")}", end='  ')
                 elif i == 3:
-                    print(f"DP×{round(100 * (1 + value2))}%", end='  ')
+                    print(f"DP×{format(1 + value2, ".0%")}", end='  ')
                 elif i == 4:
-                    print(f"DEX×{round(100 * (1 + value2))}%", end='  ')
+                    print(f"DEX×{format(1 + value2, ".0%")}", end='  ')
                 elif i == 5:
-                    print(f"LUC×{round(100 * (1 + value2))}%", end='  ')
+                    print(f"LUC×{format(1 + value2, ".0%")}", end='  ')
         if (not data.gotten) and data.price != 0:
             if data.price > MONEY:
-                print(f'{Colors.RED}€:{data.price} Gold{Colors.END}')
+                print(f'{Colors.RED}€:{data.price} G{Colors.END}')
             else:
-                print(f'{Colors.GREEN}€:{data.price} Gold{Colors.END}')
+                print(f'{Colors.GREEN}€:{data.price} G{Colors.END}')
         else:
             print('')
     print('________________________________________')
@@ -795,93 +854,466 @@ def list_gear(item_dict):
 def enter_shop(listed, item, target):
     if get_entity_by_id(listed, item).gotten:
         switch_to_gear(get_entity_by_id(listed, item), target)
-        print(f'Switched to {get_entity_by_id(listed, item).name} successfully!')
+        print("=" * 30)
+        print(i18n.t('Switched to ') + f'{i18n.t(get_entity_by_id(listed, item).name)}' + i18n.t(' successfully!'))
+        save_manager.save_game()
     elif get_entity_by_id(listed, item).price != 0:
         purchase(get_entity_by_id(listed, item), target)
+        save_manager.save_game()
     else:
-        print("You don't have that unknown equipment!")
+        print("=" * 30)
+        print(i18n.t("You don't have that unknown equipment!"))
 
 
-def main_program():
-    global energy, playerACC, playerEVA
+def bonus_initialization():
     foe_sorted_keys = sorted(enemies_dict.keys())
     print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
     for index, key in enumerate(foe_sorted_keys):
         map_bonus_generator(enemies_dict[key])
         get_map_bonus(enemies_dict[key])
     print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+    return foe_sorted_keys
+
+
+def bonus_delete():
+    foe_sorted_keys = sorted(enemies_dict.keys())
+    for index, key in enumerate(foe_sorted_keys):
+        enemies_dict[key].bonus = 'no_bonus'
+
+
+def in_game_menu():
     while True:
-        refresh_player()
-        target = input("Fight: foe ID(001/002...):\nGear: W/T/L/H/F...\n").strip()
-        if target == 'w':
+        print("\n" + "=" * 30)
+        print(i18n.t("1: STATS"))
+        print(i18n.t("2: EQUIPMENT"))
+        print(i18n.t("3: RETURN"))
+        print(i18n.t("4: MENU"))
+        print("=" * 30)
+        choice = input(i18n.t("Choose: "))
+        if choice == "1":
+            allocation_menu()
+            continue
+        elif choice == "2":
+            equipment_menu()
+            continue
+        elif choice == "3":
+            break
+        elif choice == "4":
+            return choice
+        else:
+            print(i18n.t("Invalid Choice!"))
+        continue
+
+
+def allocation_menu():
+    print("\n" + "=" * 30)
+    print(f'HP: {baseHP}({playerHP})')
+    print(f'AP: {baseAP}({playerAP})')
+    print(f'DP: {baseDP}({playerDP})')
+    print(f'DEX:{baseDEX}({playerDEX})')
+    print(f'LUC:{baseLUC}({playerLUC})')
+    point_allocator()
+
+
+def equipment_menu():
+    while True:
+        print("=" * 30)
+        print(i18n.t("1: WEAPON") + " " + f"{i18n.t(weaponOnUse.name)}")
+        print(i18n.t("2: TORSO") + "  " + f"{i18n.t(torsoOnUse.name)}")
+        print(i18n.t("3: LEG") + "    " + f"{i18n.t(legOnUse.name)}")
+        print(i18n.t("4: HAND") + "   " + f"{i18n.t(gloveOnUse.name)}")
+        print(i18n.t("5: SHIELD") + " " + f"{i18n.t(shieldOnUse.name)}")
+        print(i18n.t("6: FOOT") + "   " + f"{i18n.t(footOnUse.name)}")
+        print(i18n.t("7: RETURN"))
+        print("=" * 30)
+        target = input(i18n.t("Choose: ")).strip()
+        if target == '1':
             show_gear_info(weaponOnUse, target)
             list_gear(weapon_items)
-            targeted_weapon = input("Input weapon ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_weapon = input(i18n.t("Input weapon ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(weapon_items, targeted_weapon, target)
             continue
-        elif target == 't':
+        elif target == '2':
             show_gear_info(torsoOnUse, target)
             list_gear(torso_items)
-            targeted_torso = input("Input torso equipment ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_torso = input(i18n.t("Input torso equipment ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(torso_items, targeted_torso, target)
             continue
-        elif target == 'l':
+        elif target == '3':
             show_gear_info(legOnUse, target)
             list_gear(leg_items)
-            targeted_leg = input("Input leg guard ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_leg = input(i18n.t("Input leg guard ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(leg_items, targeted_leg, target)
             continue
-        elif target == 'h':
+        elif target == '4':
             show_gear_info(gloveOnUse, target)
             list_gear(hand_items)
-            targeted_hand = input("Input hand proof ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_hand = input(i18n.t("Input hand proof ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(hand_items, targeted_hand, target)
             continue
-        elif target == 's':
+        elif target == '5':
             show_gear_info(shieldOnUse, target)
             list_gear(shield_items)
-            targeted_shield = input("Input shield ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_shield = input(i18n.t("Input shield ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(shield_items, targeted_shield, target)
             continue
-        elif target == 'f':
+        elif target == '6':
             show_gear_info(footOnUse, target)
             list_gear(foot_items)
-            targeted_boots = input("Input foot equipment ID you gonna swap, or purchase(001/002...):").strip()
+            targeted_boots = input(i18n.t("Input foot equipment ID you gonna swap, or purchase(001/002...):")).strip()
             enter_shop(foot_items, targeted_boots, target)
             continue
-        playerACC, playerEVA = dexterity_calculator(playerDEX)
-        temp_level = level
-        battle_result = battle_simulator(playerAP, playerDP, playerHP, get_entity_by_id(enemies_dict, target))
-        if battle_result == 'win':
-            if get_entity_by_id(enemies_dict, target).is_boss:
-                energy += 2
-                print(f'Gain 2 energy! current energy: {energy}')
-            else:
-                energy -= 1
-                print(f'Consume 1 energy,current energy: {energy}')
-            drop_manager(get_entity_by_id(enemies_dict, target))
-            print('________________________________________')
-            if temp_level == level:
-                pass
-            else:
-                point_allocator()
-                refresh_player()
-                print(f'HP:{playerHP}\nAP:{playerAP}\nDP:{playerDP}\nDEX:{playerDEX}\nLUC:{playerLUC}')
-                reset_bonus(get_entity_by_id(enemies_dict, target))
-        elif battle_result == 'lose':
-            energy -= 3
-            print(f'Lose 3 energy...current energy: {energy}')
-        else:
-            continue
-        if energy <= 0:
-            print("You run out of energy!")
-            print(f'Score: Highest LEVEL: {level} !\n')
+        elif target == '7':
             break
-        print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
-        for index, key in enumerate(foe_sorted_keys):
-            get_map_bonus(enemies_dict[key])
-        print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+        else:
+            print(i18n.t("Invalid Choice!"))
+            continue
 
 
-if __name__ == '__main__':
-    main_program()
+def player_action():
+    global energy, bossDefeated
+    print("")
+    bonus_delete()
+    foe_sorted_keys = bonus_initialization()
+    while True:
+        refresh_player()
+        print(i18n.t('Your energy: ') + f'{Colors.YELLOW}{energy} ⚡{Colors.END}')
+        print("=" * 30)
+        print(i18n.t("FOE ID(001/002): FIGHT") + '\n' + i18n.t("2: OPTION"))
+        print("=" * 30)
+        target = input(i18n.t("Choose: ")).strip()
+        try:
+            if target == '2':
+                choose = in_game_menu()
+                if choose == "4":
+                    save_manager.save_game()
+                    break
+                continue
+            temp_level = level
+            if get_entity_by_id(enemies_dict, target).foe_id in bossDefeated:
+                print(i18n.t('Boss can only be defeated once in each round of the game!'))
+                continue
+            battle_result = battle_simulator(playerAP, playerDP, playerHP, get_entity_by_id(enemies_dict, target))
+            if battle_result == 'win':
+                if get_entity_by_id(enemies_dict, target).is_boss:
+                    energy += 2
+                    bossDefeated.append(get_entity_by_id(enemies_dict, target).foe_id)
+                    print(i18n.t('Gain') + f' 2{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
+                else:
+                    energy -= 1
+                    print(i18n.t('Consume') + f' 1{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
+                drop_manager(get_entity_by_id(enemies_dict, target))
+                print('________________________________________')
+                if temp_level == level:
+                    pass
+                else:
+                    if allocation_after_battle:
+                        point_allocator()
+                if get_entity_by_id(enemies_dict, target).foe_id in bossDefeated:
+                    pass
+                else:
+                    reset_bonus(get_entity_by_id(enemies_dict, target))
+                save_manager.save_game()
+            elif battle_result == 'lose':
+                energy -= 3
+                print(i18n.t('Lose') + f' 3{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
+                save_manager.save_game()
+            else:
+                save_manager.save_game()
+                continue
+            if energy <= 0:
+                print(i18n.t("You run out of energy!"))
+                print(i18n.t('Score: Highest LEVEL: ') + f'{Colors.CYAN}{level}{Colors.END} !')
+                save_manager.save_game()
+                choice = input(i18n.t("Choose: "))
+                print("\n" + "=" * 30)
+                print(i18n.t("1: NEW RUN"))
+                print(i18n.t("2: EQUIPMENT"))
+                print(i18n.t("3: MENU"))
+                print("=" * 30)
+                while True:
+                    if choice == "1":
+                        revive()
+                        save_manager.save_game()
+                        main_program()
+                    elif choice == "2":
+                        equipment_menu()
+                    elif choice == "3":
+                        show_menu()
+                    else:
+                        print(i18n.t("Invalid Choice!"))
+                    continue
+            print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+            for index, key in enumerate(foe_sorted_keys):
+                get_map_bonus(enemies_dict[key])
+            print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+        except AttributeError:
+            print(i18n.t('Please enter ID to fight') + f'({Colors.RED}001{Colors.END}' + i18n.t('for the first enemy)'))
+            continue
+
+
+def revive():
+    global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, MONEY, energy, EXP, bossDefeated
+    level = 1
+    baseHP = 100
+    baseAP, baseDP = 15, 15
+    baseDEX, baseLUC = 10, 10
+    SP, MONEY, EXP = 0, 0, 0
+    energy = 25
+    bossDefeated = []
+
+
+def main_program():
+    player_action()
+
+
+def show_menu():
+    file_path = os.path.join("saves", "save.dat")
+    if os.path.isfile(file_path):
+        print("\n" + "=" * 30)
+        print(i18n.t("1: CONTINUE"))
+        print(i18n.t("2: NEW RUN"))
+        print(i18n.t("3: SETTINGS"))
+        print(i18n.t("4: EXIT"))
+        print("=" * 30)
+        return True
+    else:
+        print("\n" + "=" * 30)
+        print(i18n.t("1: NEW SAVE"))
+        print("2: ---")
+        print(i18n.t("3: SETTINGS"))
+        print(i18n.t("4: EXIT"))
+        print("=" * 30)
+        return False
+
+
+def settings():
+    while True:
+        global languages
+        print("\n" + "=" * 30)
+        print(i18n.t("1: SWITCH LANGUAGES TO 简体中文"))
+        print(i18n.t("2: DELETE SAVE ☠"))
+        print(i18n.t("3: RETURN"))
+        print("=" * 30)
+        choice = input(i18n.t("Choose: "))
+        if choice == "1" and languages == 'english':
+            languages = '简体中文'
+            i18n.set_lang(languages)
+            print("切换至简体中文！")
+        elif choice == "1" and languages == '简体中文':
+            languages = 'english'
+            i18n.set_lang(languages)
+            print("Switch to English!")
+        elif choice == "2":
+            confirm = input(i18n.t("Do you want to continue ☠? (y/n): "))
+            if confirm == 'y':
+                save_manager.delete_save()
+                break
+            elif confirm == 'n':
+                continue
+            else:
+                print(i18n.t("Invalid Choice!"))
+        elif choice == "3":
+            break
+        else:
+            print(i18n.t("Invalid Choice!"))
+        if level != 0:
+            save_manager.save_game()
+
+
+def run():
+    quick_load()
+    i18n.set_lang(languages)
+    while True:
+        if show_menu():
+            choice = input(i18n.t("Choose: "))
+            if choice == "1":
+                main_program()
+            elif choice == "2":
+                revive()
+                main_program()
+            elif choice == "3":
+                settings()
+            elif choice == "4":
+                break
+            else:
+                print(i18n.t("Invalid Choice!"))
+        else:
+            choice = input(i18n.t("Choose: "))
+            if choice == "1":
+                revive()
+                save_manager.save_game()
+                main_program()
+            elif choice == "2":
+                pass
+            elif choice == "3":
+                settings()
+            elif choice == "4":
+                break
+            else:
+                print(i18n.t("Invalid Choice!"))
+
+
+class GameSaveManager:
+    def __init__(self, save_dir="saves"):
+        self.save_dir = Path(save_dir)
+        self.save_dir.mkdir(exist_ok=True)
+
+    @staticmethod
+    def get_game_state():
+        main_vars = {
+            'level': level,
+            'baseHP': baseHP,
+            'baseAP': baseAP,
+            'baseDP': baseDP,
+            'baseDEX': baseDEX,
+            'baseLUC': baseLUC,
+            'SP': SP,
+            'MONEY': MONEY,
+            'energy': energy,
+            'EXP': EXP,
+            'allocation_after_battle': allocation_after_battle,
+            'weaponOnUse' : weaponOnUse,
+            'torsoOnUse' : torsoOnUse,
+            'legOnUse' : legOnUse,
+            'gloveOnUse' : gloveOnUse,
+            'shieldOnUse' : shieldOnUse,
+            'footOnUse' : footOnUse,
+            'languages' : languages,
+            'bossDefeated' : bossDefeated
+        }
+
+        weapon_data = weapon_items.copy()
+        torso_data = torso_items.copy()
+        leg_data = leg_items.copy()
+        shield_data = shield_items.copy()
+        hand_data = hand_items.copy()
+        foot_data = foot_items.copy()
+        enemy_data = enemies_dict.copy()
+
+        save_data = {
+            'main_data': main_vars,
+            'weapon_data': weapon_data,
+            'torso_data': torso_data,
+            'leg_data': leg_data,
+            'shield_data': shield_data,
+            'hand_data': hand_data,
+            'foot_data': foot_data,
+            'enemy_data': enemy_data,
+            'save_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'version': '1.1'
+        }
+        return save_data
+
+    def save_game(self):
+        save_data = self.get_game_state()
+        save_file = self.save_dir / f"save.dat"
+        backup_file = self.save_dir / f"save.bak"
+
+        if save_file.exists():
+            if backup_file.exists():
+                backup_file.unlink()
+            save_file.rename(backup_file)
+
+        try:
+            with open(save_file, 'wb') as f:
+                pickle.dump(save_data, f)
+            return True
+        except Exception as e:
+            print(i18n.t("Fail to save:") + f'{e}')
+            if backup_file.exists():
+                backup_file.rename(save_file)
+            return False
+
+    def load_game(self):
+        save_file = self.save_dir / "save.dat"
+        if not save_file.exists():
+            return None
+
+        try:
+            with open(save_file, 'rb') as f:
+                save_data = pickle.load(f)
+
+            if 'main_data' not in save_data:
+                print(i18n.t("Saved file is broken!"))
+                return None
+
+            return save_data
+        except (pickle.UnpicklingError, EOFError, KeyError) as e:
+            print(i18n.t("File to load:") + f'{e}')
+            return None
+        except Exception as e:
+            print(i18n.t("Unknown error:") + f'{e}')
+            return None
+
+    @staticmethod
+    def apply_save_data(save_data):
+        global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, EXP, MONEY, energy, allocation_after_battle, weaponOnUse,torsoOnUse, gloveOnUse, shieldOnUse, footOnUse, legOnUse, languages, bossDefeated
+        if not save_data:
+            return False
+
+        try:
+            main_data = save_data['main_data']
+            level = main_data['level']
+            baseHP = main_data['baseHP']
+            baseAP = main_data['baseAP']
+            baseDP = main_data['baseDP']
+            baseDEX = main_data['baseDEX']
+            baseLUC = main_data['baseLUC']
+            SP = main_data['SP']
+            EXP = main_data['EXP']
+            MONEY = main_data['MONEY']
+            energy = main_data['energy']
+            allocation_after_battle = main_data['allocation_after_battle']
+            languages = main_data['languages']
+            weaponOnUse = main_data['weaponOnUse']
+            torsoOnUse = main_data['torsoOnUse']
+            gloveOnUse = main_data['gloveOnUse']
+            legOnUse = main_data['legOnUse']
+            shieldOnUse = main_data['shieldOnUse']
+            footOnUse = main_data['footOnUse']
+            bossDefeated = main_data['bossDefeated']
+
+            weapon_items.clear()
+            weapon_items.update(save_data['weapon_data'])
+            torso_items.clear()
+            torso_items.update(save_data['torso_data'])
+            leg_items.clear()
+            leg_items.update(save_data['leg_data'])
+            shield_items.clear()
+            shield_items.update(save_data['shield_data'])
+            hand_items.clear()
+            hand_items.update(save_data['hand_data'])
+            foot_items.clear()
+            foot_items.update(save_data['foot_data'])
+            enemies_dict.clear()
+            enemies_dict.update(save_data['enemy_data'])
+
+            return True
+        except Exception as e:
+            print(i18n.t("Fail to apply data:") + f'{e}')
+            return False
+
+
+    def delete_save(self):
+        save_file = self.save_dir / "save.dat"
+        backup_file = self.save_dir / "save.bak"
+        if save_file.exists():
+            save_file.unlink()
+        if backup_file.exists():
+            backup_file.unlink()
+        print(i18n.t("Save file deleted"))
+
+
+save_manager = GameSaveManager()
+
+
+def quick_load():
+    save_data = save_manager.load_game()
+    if save_data:
+        return save_manager.apply_save_data(save_data)
+    return False
+
+
+if __name__ == "__main__":
+    run()
