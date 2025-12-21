@@ -1,4 +1,5 @@
 import math
+import re
 import time
 import os
 from random import random
@@ -16,11 +17,13 @@ from weapon import weapon_items
 from shield import shield_items
 from hand import hand_items
 from foot import foot_items
+from accessory import accessory_items
 
-all_dicts = [enemies_dict, weapon_items, torso_items, leg_items, hand_items, shield_items, foot_items]
+all_dicts = [enemies_dict, weapon_items, torso_items, leg_items, hand_items, shield_items, foot_items, accessory_items]
 i18n = Language()
 
 
+base_energy: int = 0
 energy: int = 0
 level: int = 0
 playerHP: int = 0
@@ -34,6 +37,19 @@ gloveOnUse = hand_items.get('000')
 legOnUse = leg_items.get('000')
 shieldOnUse = shield_items.get('000')
 footOnUse = foot_items.get('000')
+acc1OnUse = accessory_items.get('000')
+acc2OnUse = accessory_items.get('000')
+acc3OnUse = accessory_items.get('000')
+acc4OnUse = accessory_items.get('000')
+acc5OnUse = accessory_items.get('000')
+acc6OnUse = accessory_items.get('000')
+slot1 = 0
+slot2 = 2000
+slot3 = 20000
+slot4 = 200000
+slot5 = 2000000
+slot6 = 20000000
+
 baseHP: int = 0
 baseAP: int = 0
 baseDP: int = 0
@@ -48,18 +64,17 @@ thunderRESIS: float = 0
 holyRESIS: float = 0
 darkRESIS: float = 0
 
-
-playerACC: int = 0
-playerEVA: int = 0
 SP: int = 0
 EXP: int = 0
 MONEY: int = 0
 criticalChance: float = 0.1
 criticalDamage: float = 1.5
 bossDefeated = []
+bonusEXP = 0
 
 
 allocation_after_battle = True
+autoAllocationStrategy = '0 0 0 0 0'
 languages = 'english'
 
 
@@ -173,33 +188,16 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
     foe_ap = foe_ap_calculator(foe)
     foe_dp = foe_dp_calculator(foe)
     current_foe_hp = foe_hp
-    player_acc = playerACC
-    player_eva = playerEVA
     if foe.is_boss:
-        print(i18n.t('You encountered') + f' {i18n.t(foe.name)}! {Colors.RED}(Boss){Colors.END}')
+        print(i18n.t('You encountered') + f' LV{foe.foe_level} {i18n.t(foe.name)}! {Colors.RED}(Boss){Colors.END}')
     else:
-        print(i18n.t('You encountered') + f' {i18n.t(foe.name)}!')
-    if foe.bonus == 'BLESS100P':
-        acc_eva_multiplier = 2
-    elif foe.bonus == 'ULTIMATE':
-        acc_eva_multiplier = 1.5
-    else:
-        acc_eva_multiplier = 1
-    hit_rate = 100 - round((foe.foe_level / 2) * 100 / ((player_acc ** 0.9) * acc_eva_multiplier))
-    eva_rate = 100 - round((20 + foe.foe_level) * 100 / ((player_eva ** 0.9) * acc_eva_multiplier))
-    if hit_rate < 3:
-        hit_rate = 2
-    else:
-        hit_rate = round(0.98 * hit_rate + 2)
-    if eva_rate < 0:
-        eva_rate = 0
-    elif eva_rate > 60:
-        eva_rate = 60
-    print(i18n.t('Hit Rate:') + f' {hit_rate}% ' + i18n.t('Dodge Rate:') + f' {eva_rate}%')
+        print(i18n.t('You encountered') + f' LV{foe.foe_level} {i18n.t(foe.name)}!')
+    hit_rate, eva_rate = evasion_calculator(foe)
+    print(i18n.t('Hit Rate:') + f' {round(100 * hit_rate)}% ' + i18n.t('Dodge Rate:') + f' {round(100 * eva_rate)}%')
     if foe.bonus == 'DP100P':
         dp_bonus = 2
     elif foe.bonus == 'ULTIMATE':
-        dp_bonus = 1.6
+        dp_bonus = 1.5
     else:
         dp_bonus = 1
     if foe.bonus == 'AP50P':
@@ -232,8 +230,7 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
         break
     sleep_span: float = 1
     for i in range(10000):
-        is_hit, is_evaded = evasion_calculator(player_acc, player_eva, foe)
-        if is_hit:
+        if random() < hit_rate:
             damage, is_critical, elemental_factor = player_damage_calculator(player_ap, weaponOnUse, foe)
             current_foe_hp -= damage
             if is_critical:
@@ -265,7 +262,7 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
             level_manager(exp)
             return 'win'
         time.sleep(sleep_span)
-        if not is_evaded:
+        if random() >= eva_rate:
             damage, elemental_factor = foe_damage_calculator(foe, player_dp)
             current_player_hp -= damage
             if elemental_factor == 1:
@@ -303,7 +300,8 @@ def foe_ap_calculator(foe):
         multiplier = 1.2
     else:
         multiplier = 1
-    foe_ap: int = math.floor((10 + 1.6 * foe.foe_level + math.floor(foe.foe_level ** 1.1)) * multiplier) + foe.foe_ap_modifier
+    level_exponent = 1.1 + (1 / 35) * math.log10(foe.foe_level)
+    foe_ap: int = math.floor((10 + 1.6 * foe.foe_level + foe.foe_level ** level_exponent) * multiplier + foe.foe_ap_modifier)
     return foe_ap
 
 
@@ -312,7 +310,8 @@ def foe_dp_calculator(foe):
         multiplier = 1.2
     else:
         multiplier = 1
-    foe_dp: int = math.floor((10 + math.floor(foe.foe_level ** 1.1)) * multiplier) + foe.foe_dp_modifier
+    level_exponent = 1.1 + (1 / 35) * math.log10(foe.foe_level)
+    foe_dp: int = math.floor((10 + foe.foe_level ** level_exponent) * multiplier + foe.foe_dp_modifier)
     return foe_dp
 
 
@@ -321,7 +320,8 @@ def foe_hp_calculator(foe):
         multiplier = 1.2
     else:
         multiplier = 1
-    foe_hp: int = math.floor((75 + 20 * foe.foe_level + foe.foe_level ** 1.3) * multiplier + foe.foe_hp_modifier)
+    level_exponent = 1.3 + (1/35) * math.log10(foe.foe_level)
+    foe_hp: int = math.floor((75 + 20 * foe.foe_level + foe.foe_level ** level_exponent) * multiplier + foe.foe_hp_modifier)
     return foe_hp
 
 
@@ -330,35 +330,44 @@ def foe_threshold_calculator(foe_level):
     return foe_threshold
 
 
-def dexterity_calculator(player_dex):
-    player_acc: int = 10 + player_dex * 4
-    player_eva: int = 10 + player_dex * 2
-    return player_acc, player_eva
-
-
-def evasion_calculator(player_acc, player_eva, foe):
+def evasion_calculator(foe):
     accuracy_evasion_multiplier = 1
     if foe.bonus == 'BLESS100P':
-        accuracy_evasion_multiplier = 2
-    elif foe.bonus == 'ULTIMATE':
         accuracy_evasion_multiplier = 1.5
+    elif foe.bonus == 'ULTIMATE':
+        accuracy_evasion_multiplier = 1.2
     foe_level = foe.foe_level
-    is_evaded = False
-    if (player_acc ** 0.9) * accuracy_evasion_multiplier * random() >= (foe_level / 2):
-        is_hit = True
-    else:
-        if random() < 0.02:
-            is_hit = True
+    base_ratio = (playerDEX * accuracy_evasion_multiplier) / (foe_level + 5)
+    level_factor = 1.0 + 0.1 * math.log10(max(foe_level, 1))
+    adjusted_ratio = base_ratio / level_factor
+    if adjusted_ratio <= 0.7:
+        if adjusted_ratio >= 0.5:
+            hit_rate = 0.95 - (0.95 - 0.86) * ((0.7 - adjusted_ratio) / 0.2)
         else:
-            is_hit = False
-    if (100 - round((25 + foe_level) * 100 / ((player_eva ** 0.9) * accuracy_evasion_multiplier))) > 60:
-        if random() > 0.4:
-            is_evaded = True
-            return is_hit, is_evaded
-        return is_hit, is_evaded
-    if (player_eva ** 0.9) * accuracy_evasion_multiplier * random() >= 20 + foe_level:
-        is_evaded = True
-    return is_hit, is_evaded
+            hit_rate = 0.86 - (0.86 - 0.05) * ((0.5 - adjusted_ratio) / 0.5)
+            hit_rate = max(0.05, hit_rate)
+    elif adjusted_ratio <= 1.0:
+        hit_rate = 0.95
+    elif adjusted_ratio <= 2.0:
+        hit_rate = 0.95 + 0.05 * ((adjusted_ratio - 1.0) / 1.0)
+    else:
+        hit_rate = 1.0
+    hit_rate = max(0.05, min(1.0, hit_rate))
+    if adjusted_ratio <= 0.7:
+        if adjusted_ratio >= 0.5:
+            dodge_rate = 0.14 * ((adjusted_ratio - 0.5) / 0.2)
+        else:
+            dodge_rate = 0.0
+    elif adjusted_ratio <= 1.0:
+        dodge_rate = 0.14
+    elif adjusted_ratio <= 2.0:
+        dodge_rate = 0.14 + 0.26 * ((adjusted_ratio - 1.0) / 1.0)
+    elif adjusted_ratio <= 4.0:
+        dodge_rate = 0.4 + 0.3 * ((adjusted_ratio - 2.0) / 2.0)
+    else:
+        dodge_rate = 0.7
+    dodge_rate = max(0.0, min(0.7, dodge_rate))
+    return round(hit_rate, 4), round(dodge_rate, 4)
 
 
 def exp_calculator(foe):
@@ -369,7 +378,7 @@ def exp_calculator(foe):
         multiplier = 2
     else:
         multiplier = 1
-    exp_gained = math.floor(30 + foe.foe_level * 2 + 1.2 * foe.foe_level ** 2.1) * exp_bonus_multiplier
+    exp_gained = math.floor((30 + foe.foe_level * 2 + 1.2 * foe.foe_level ** 2.1) * exp_bonus_multiplier * (1 + bonusEXP / 100))
     return multiplier * exp_gained
 
 
@@ -410,34 +419,71 @@ def level_manager(exp):
     level = max_level
 
 
-def point_allocator():
-    global baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, allocation_after_battle
+def point_allocator(auto, skipped):
+    global baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, allocation_after_battle, autoAllocationStrategy
     while True:
         try:
-            print(i18n.t('Current:') + f'{Colors.GREEN}{SP} ◆{Colors.END}')
-            print("=" * 30)
-            print(i18n.t("(1 1 0 0 0,etc): Allocation strategy"))
-            print(i18n.t("2: Toggle allocation after battle, current:") + f" {allocation_after_battle}")
-            print(i18n.t("3: RETURN"))
-            print("=" * 30)
-            user_input = input("Choose: ").strip()
-            if user_input == '2' and allocation_after_battle:
-                allocation_after_battle = False
-                print(i18n.t('Allocation after battle disabled!'))
-                save_manager.save_game()
-                continue
-            elif user_input == '2' and not allocation_after_battle:
-                allocation_after_battle = True
-                print(i18n.t('Allocation after battle enabled!'))
-                save_manager.save_game()
-                continue
-            elif user_input == '3':
-                return
-            if SP <= 0:
-                print(i18n.t("No SP available!"))
-                return
-            if not user_input:
-                continue
+            if auto != '0 0 0 0 0' and skipped:
+                user_input = auto
+            elif auto == '0 0 0 0 0' and skipped:
+                break
+            else:
+                print(i18n.t('Current:') + f'{Colors.GREEN}{SP} ◆{Colors.END}')
+                print("=" * 30)
+                print(i18n.t("(1 1 0 0 0,etc): Allocation strategy"))
+                if allocation_after_battle:
+                    after_battle_sign = "Enabled"
+                else:
+                    after_battle_sign = "Disabled"
+                print(i18n.t("2: Toggle allocation after battle, current:") + f" {i18n.t(after_battle_sign)}")
+                print(i18n.t("3: Auto allocation, current:") + f" {autoAllocationStrategy}")
+                print(i18n.t("4: RETURN"))
+                print("=" * 30)
+                user_input = input(i18n.t("Choose: ")).strip()
+                if user_input == '2' and allocation_after_battle:
+                    allocation_after_battle = False
+                    print(i18n.t('Allocation after battle disabled!'))
+                    save_manager.save_game()
+                    continue
+                elif user_input == '2' and not allocation_after_battle:
+                    allocation_after_battle = True
+                    print(i18n.t('Allocation after battle enabled!'))
+                    save_manager.save_game()
+                    continue
+                elif user_input == '3':
+                    while True:
+                        try:
+                            print("=" * 30)
+                            print(i18n.t("(1 1 0 0 0,etc): Auto allocation") + f" ({autoAllocationStrategy})")
+                            print(i18n.t("2: Disable auto allocation"))
+                            print(i18n.t("3: RETURN"))
+                            print("=" * 30)
+                            auto_allocation = input(i18n.t("Choose: ")).strip()
+                            if auto_allocation == '2':
+                                autoAllocationStrategy = '0 0 0 0 0'
+                                print(i18n.t("Auto allocation disabled!"))
+                            elif auto_allocation == '3':
+                                user_input = 'RETURN'
+                                break
+                            else:
+                                numbers2 = list(map(int, auto_allocation.split()))
+                                if (len(numbers2) != 5) or any(n < 0 for n in numbers2) or sum(numbers2) == 0:
+                                    print(i18n.t("Please enter valid FORMAT") + f"({Colors.RED}2 1 0 0 0 {Colors.END}" + i18n.t("means 66.6% points for HP and 33.3% for AP, etc)!"))
+                                    continue
+                                autoAllocationStrategy = auto_allocation
+                                print(i18n.t("Auto allocation has been set to") + f' {autoAllocationStrategy}')
+                            save_manager.save_game()
+                            continue
+                        except ValueError:
+                            print(i18n.t("Please enter valid FORMAT") + f"({Colors.RED}2 1 0 0 0 {Colors.END}" + i18n.t("means 66.6% points for HP and 33.3% for AP, etc)!"))
+                            continue
+                elif user_input == '4':
+                    return
+                if SP <= 0:
+                    print(i18n.t("No SP available!"))
+                    return
+                if user_input == 'RETURN':
+                    continue
             numbers = list(map(int, user_input.split()))
             if (len(numbers) != 5) or any(n < 0 for n in numbers) or sum(numbers) == 0:
                 print(i18n.t("Please enter valid FORMAT") + f"({Colors.RED}2 1 0 0 0 {Colors.END}" + i18n.t("means 66.6% points for HP and 33.3% for AP, etc)!"))
@@ -510,37 +556,41 @@ def money_calculator(foe):
 
 def map_bonus_generator(foe):
     bonus_indicator = random()
-    if bonus_indicator < 0.035:
+    if bonus_indicator < 0.02:
         foe.bonus = 'EXP100P'
-    elif bonus_indicator < 0.07:
+    elif bonus_indicator < 0.04:
         foe.bonus = 'AP50P'
-    elif bonus_indicator < 0.105:
+    elif bonus_indicator < 0.06:
         foe.bonus = 'DP100P'
-    elif bonus_indicator < 0.14:
+    elif bonus_indicator < 0.08:
         foe.bonus = 'MONEY100P'
-    elif bonus_indicator < 0.175:
+    elif bonus_indicator < 0.1:
         foe.bonus = 'CRIT30P'
-    elif bonus_indicator < 0.2:
+    elif bonus_indicator < 0.11:
         foe.bonus = 'ULTIMATE'
-    elif bonus_indicator < 0.235:
+    elif bonus_indicator < 0.13:
         foe.bonus = 'BLESS100P'
 
 
 def get_map_bonus(foe):
+    if foe.is_boss:
+        boss_sign = '(BOSS)'
+    else:
+        boss_sign = ''
     if foe.bonus == 'EXP100P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('now drops 200% EXP!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('now drops 200% EXP!'))
     elif foe.bonus == 'AP50P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is fragile!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('is fragile!'))
     elif foe.bonus == 'DP100P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is exhausted!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('is exhausted!'))
     elif foe.bonus == 'MONEY100P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('now drops 200% MONEY!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('now drops 200% MONEY!'))
     elif foe.bonus == 'CRIT30P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is exposing its weakness!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('is exposing its weakness!'))
     elif foe.bonus == 'ULTIMATE':
-        print(f'({Colors.YELLOW}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is at last gasp!!!'))
+        print(f'({Colors.YELLOW}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('is at last gasp!!!'))
     elif foe.bonus == 'BLESS100P':
-        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}){i18n.t(foe.name)} ' + i18n.t('is slow in movement!'))
+        print(f'({Colors.CYAN}{foe.foe_id}{Colors.END}) {Colors.BOLD}LV{foe.foe_level}{Colors.END} {i18n.t(foe.name)}{Colors.RED}{boss_sign}{Colors.END} ' + i18n.t('is slow in movement!'))
 
 
 def reset_bonus(foe):
@@ -549,8 +599,6 @@ def reset_bonus(foe):
 
 
 def battle_predictor(foe):
-    player_acc = playerACC
-    player_eva = playerEVA
     player_ap = playerAP
     player_dp = playerDP
     player_hp = playerHP
@@ -560,14 +608,14 @@ def battle_predictor(foe):
         simulated_foe_hp = foe_hp
         simulated_player_hp = player_hp
         for i in range(10000):
-            is_hit, is_evaded = evasion_calculator(player_acc, player_eva, foe)
-            if is_hit:
+            acc_rate, eva_rate = evasion_calculator(foe)
+            if random() < acc_rate:
                 damage, is_critical, elemental = player_damage_calculator(player_ap, weaponOnUse, foe)
                 simulated_foe_hp -= damage
             if simulated_foe_hp <= 0:
                 win_count += 1
                 break
-            if not is_evaded:
+            if random() >= eva_rate:
                 damage, elemental = foe_damage_calculator(foe, player_dp)
                 simulated_player_hp -= damage
             if simulated_player_hp <= 0:
@@ -590,11 +638,11 @@ def battle_predictor(foe):
 
 
 def switch_to_gear(equipment, item_type):
-    global weaponOnUse, torsoOnUse, legOnUse, gloveOnUse, footOnUse, shieldOnUse
+    global weaponOnUse, torsoOnUse, legOnUse, gloveOnUse, footOnUse, shieldOnUse, acc1OnUse, acc2OnUse, acc3OnUse, acc4OnUse, acc5OnUse, acc6OnUse
     if item_type == '1':
         temp_element = equipment.element
         if not temp_element == weaponOnUse.element:
-            print(i18n.t('weapon element:') + f' {weaponOnUse.element}({100 * weaponOnUse.element_percentage}%) ----> {equipment.element}({100 * equipment.element_percentage}%)')
+            print(i18n.t('weapon element:') + f' {i18n.t(weaponOnUse.element)}({format(weaponOnUse.element_percentage, ".0%")}%) ----> {i18n.t(equipment.element)}({format(equipment.element_percentage, ".0%")}%)')
         weaponOnUse = equipment
     elif item_type == '2':
         torsoOnUse = equipment
@@ -606,6 +654,18 @@ def switch_to_gear(equipment, item_type):
         shieldOnUse = equipment
     elif item_type == '6':
         footOnUse = equipment
+    elif item_type == 'a1':
+        acc1OnUse = equipment
+    elif item_type == 'a2':
+        acc2OnUse = equipment
+    elif item_type == 'a3':
+        acc3OnUse = equipment
+    elif item_type == 'a4':
+        acc4OnUse = equipment
+    elif item_type == 'a5':
+        acc5OnUse = equipment
+    elif item_type == 'a6':
+        acc6OnUse = equipment
     temp_hp, temp_ap, temp_dp, temp_dex, temp_luc = stats_calculator()
     if not playerHP == temp_hp:
         print(f'HP: {playerHP} ----> {Colors.BOLD}{temp_hp}{Colors.END}')
@@ -618,7 +678,7 @@ def switch_to_gear(equipment, item_type):
     if not playerLUC == temp_luc:
         print(f'LUC: {playerLUC} ----> {Colors.BOLD}{temp_luc}{Colors.END}')
     resistance_count = {'piercing': 0, 'slashing': 0, 'bludgeoning': 0, 'fire': 0, 'ice': 0, 'thunder': 0, 'holy': 0, 'dark': 0}
-    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
+    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, footOnUse]:
         resistance = item_info.element
         percentage = item_info.element_percentage
         if resistance != 'none':
@@ -639,27 +699,60 @@ def switch_to_gear(equipment, item_type):
         print(i18n.t('holyRESIS:') + f' {100 * holyRESIS}% ----> {100 * resistance_count['holy']}%')
     if not resistance_count['dark'] == darkRESIS:
         print(i18n.t('darkRESIS:') + f' {100 * darkRESIS}% ----> {100 * resistance_count['dark']}%')
-    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
-        resistance = item_info.element
-        if resistance != 'none':
-            resistance_count[resistance] = 0
+    exp_bonus = 0
+    temp_energy = base_energy
+    for i in [weaponOnUse, shieldOnUse, gloveOnUse, torsoOnUse, footOnUse, legOnUse, acc1OnUse, acc2OnUse, acc3OnUse,acc4OnUse, acc5OnUse, acc6OnUse]:
+        for j in range(1, 5):
+            attr_name = f'attri{j}'
+            special_items = getattr(i, attr_name)
+            if special_items.startswith("EXP"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                exp_bonus += round(100 * float(match.group()))
+            elif special_items.startswith("ENERGY"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                temp_energy += int(match.group())
+    if not exp_bonus == bonusEXP:
+        print(i18n.t('EXP + ') + f' {bonusEXP}% ----> {exp_bonus}%')
+    if not temp_energy == energy:
+        print(f'{Colors.YELLOW}{energy} ⚡{Colors.END} ----> {Colors.YELLOW}{temp_energy} ⚡{Colors.END}')
+    refresh_player()
 
 
 def stats_calculator():
-    temp_hp = round(sum([baseHP, weaponOnUse.base_stats1, torsoOnUse.base_stats1, legOnUse.base_stats1, gloveOnUse.base_stats1, shieldOnUse.base_stats1, footOnUse.base_stats1]) * sum([weaponOnUse.multiplier1, torsoOnUse.multiplier1, legOnUse.multiplier1, gloveOnUse.multiplier1, shieldOnUse.multiplier1, footOnUse.multiplier1], 1))
-    temp_ap = round(sum([baseAP, weaponOnUse.base_stats2, torsoOnUse.base_stats2, legOnUse.base_stats2, gloveOnUse.base_stats2, shieldOnUse.base_stats2, footOnUse.base_stats2]) * sum([weaponOnUse.multiplier2, torsoOnUse.multiplier2, legOnUse.multiplier2, gloveOnUse.multiplier2, shieldOnUse.multiplier2, footOnUse.multiplier2], 1))
-    temp_dp = round(sum([baseDP, weaponOnUse.base_stats3, torsoOnUse.base_stats3, legOnUse.base_stats3, gloveOnUse.base_stats3, shieldOnUse.base_stats3, footOnUse.base_stats3]) * sum([weaponOnUse.multiplier3, torsoOnUse.multiplier3, legOnUse.multiplier3, gloveOnUse.multiplier3, shieldOnUse.multiplier3, footOnUse.multiplier3], 1))
-    temp_dex = round(sum([baseDEX, weaponOnUse.base_stats4, torsoOnUse.base_stats4, legOnUse.base_stats4, gloveOnUse.base_stats4, shieldOnUse.base_stats4, footOnUse.base_stats4]) * sum([weaponOnUse.multiplier4, torsoOnUse.multiplier4, legOnUse.multiplier4, gloveOnUse.multiplier4, shieldOnUse.multiplier4, footOnUse.multiplier4], 1))
-    temp_luc = round(sum([baseLUC, weaponOnUse.base_stats5, torsoOnUse.base_stats5, legOnUse.base_stats5, gloveOnUse.base_stats5, shieldOnUse.base_stats5, footOnUse.base_stats5]) * sum([weaponOnUse.multiplier5, torsoOnUse.multiplier5, legOnUse.multiplier5, gloveOnUse.multiplier5, shieldOnUse.multiplier5, footOnUse.multiplier5], 1))
+    temp_hp = 0
+    temp_hp_multiplier = 1
+    temp_ap = 0
+    temp_ap_multiplier = 1
+    temp_dp = 0
+    temp_dp_multiplier = 1
+    temp_dex = 0
+    temp_dex_multiplier = 1
+    temp_luc = 0
+    temp_luc_multiplier = 1
+    for i in [weaponOnUse, shieldOnUse, gloveOnUse, torsoOnUse, footOnUse, legOnUse, acc1OnUse, acc2OnUse, acc3OnUse, acc4OnUse, acc5OnUse, acc6OnUse]:
+        temp_hp += i.base_stats1
+        temp_hp_multiplier += i.multiplier1
+        temp_ap += i.base_stats2
+        temp_ap_multiplier += i.multiplier2
+        temp_dp += i.base_stats3
+        temp_dp_multiplier += i.multiplier3
+        temp_dex += i.base_stats4
+        temp_dex_multiplier += i.multiplier4
+        temp_luc += i.base_stats5
+        temp_luc_multiplier += i.multiplier5
+    temp_hp = round((temp_hp + baseHP) * temp_hp_multiplier)
+    temp_ap = round((temp_ap + baseAP) * temp_ap_multiplier)
+    temp_dp = round((temp_dp + baseDP) * temp_dp_multiplier)
+    temp_dex = round((temp_dex + baseDEX) * temp_dex_multiplier)
+    temp_luc = round((temp_luc + baseLUC) * temp_luc_multiplier)
     return temp_hp, temp_ap, temp_dp, temp_dex, temp_luc
 
 
 def refresh_player():
-    global playerHP, playerAP, playerDP, playerDEX, playerLUC, piercingRESIS, slashingRESIS, bludgeoningRESIS, fireRESIS, iceRESIS, thunderRESIS, holyRESIS, darkRESIS, playerACC, playerEVA
+    global playerHP, playerAP, playerDP, playerDEX, playerLUC, piercingRESIS, slashingRESIS, bludgeoningRESIS, fireRESIS, iceRESIS, thunderRESIS, holyRESIS, darkRESIS, bonusEXP, energy
     playerHP, playerAP, playerDP, playerDEX, playerLUC = stats_calculator()
-    playerACC, playerEVA = dexterity_calculator(playerDEX)
     resistance_count = {'piercing': 0, 'slashing': 0, 'bludgeoning': 0, 'fire': 0, 'ice': 0, 'thunder': 0, 'holy': 0, 'dark': 0}
-    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, shieldOnUse, footOnUse]:
+    for item_info in [gloveOnUse, shieldOnUse, legOnUse, torsoOnUse, footOnUse]:
         resistance = item_info.element
         percentage = item_info.element_percentage
         if resistance != 'none':
@@ -672,6 +765,18 @@ def refresh_player():
     thunderRESIS = resistance_count['thunder']
     holyRESIS = resistance_count['holy']
     darkRESIS = resistance_count['dark']
+    bonusEXP = 0
+    energy = base_energy
+    for i in [weaponOnUse, shieldOnUse, gloveOnUse, torsoOnUse, footOnUse, legOnUse, acc1OnUse, acc2OnUse, acc3OnUse,acc4OnUse, acc5OnUse, acc6OnUse]:
+        for j in range(1, 5):
+            attr_name = f'attri{j}'
+            special_items = getattr(i, attr_name)
+            if special_items.startswith("EXP"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                bonusEXP += round(100 * float(match.group()))
+            elif special_items.startswith("ENERGY"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                energy += int(match.group())
 
 
 def drop_manager(foe):
@@ -687,22 +792,60 @@ def drop_manager(foe):
         while True:
             r = math.ceil(3 * random())
             try:
-                if r == 1 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
-                    get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten = True
-                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop1)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
-                    return
+                if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1) in accessory_items.values():
+                    if r == 1 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten = True
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop1)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                    elif r == 1 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).item_count < get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).limit:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop1)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                else:
+                    if r == 1 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten = True
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop1)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
                 r = 2
-                if r == 2 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
-                    get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten = True
-                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop2)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
-                    return
+                if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2) in accessory_items.values():
+                    if r == 2 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten = True
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop2)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                    elif r == 2 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2),foe.drop2).item_count < get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).limit:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop2)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                else:
+                    if r == 2 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten = True
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop2)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
                 r = 3
-                if r == 3 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
-                    get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten = True
-                    print(i18n.t('You got') + f'{Colors.UNDERLINE}{i18n.t(foe.drop3)}{Colors.END}' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
-                    return
-                elif r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
-                    continue
+                if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3) in accessory_items.values():
+                    if r == 3 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten = True
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop3)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                    elif r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3),foe.drop3).item_count < get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).limit:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).item_count += 1
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop3)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                else:
+                    if r == 3 and not get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
+                        get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten = True
+                        print(i18n.t('You got') + f' {Colors.UNDERLINE}{i18n.t(foe.drop3)}{Colors.END} ' + i18n.t('from') + f'{i18n.t(foe.name)}!!!')
+                        return
+                if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3) in accessory_items.values():
+                    if r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
+                        if r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3),foe.drop3).item_count == get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).limit:
+                            continue
+                else:
+                    if r == 3 and get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
+                        continue
                 return
             except AttributeError:
                 if r == 1:
@@ -716,7 +859,10 @@ def drop_manager(foe):
 def drop_list(foe):
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).gotten:
-            print(f'-----------------------\n{i18n.t(foe.drop1)} {Colors.GREEN}√{Colors.END}', end=' ')
+            if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1) in accessory_items.values():
+                print(f'-----------------------\n{i18n.t(foe.drop1)} ({get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).item_count}/{get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).limit}) {Colors.GREEN}√{Colors.END}', end=' ')
+            else:
+                print(f'-----------------------\n{i18n.t(foe.drop1)} {Colors.GREEN}√{Colors.END}', end=' ')
         else:
             print(f'-----------------------\n ???', end='   ')
     except AttributeError:
@@ -724,7 +870,10 @@ def drop_list(foe):
         return
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).gotten:
-            print(f'{i18n.t(foe.drop2)} {Colors.GREEN}√{Colors.END}', end=' ')
+            if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2) in accessory_items.values():
+                print(f'{i18n.t(foe.drop2)} ({get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).item_count}/{get_entity_by_name(get_dict_by_name(all_dicts, foe.drop2), foe.drop2).limit}) {Colors.GREEN}√{Colors.END}', end=' ')
+            else:
+                print(f'{i18n.t(foe.drop2)} {Colors.GREEN}√{Colors.END}', end=' ')
         else:
             print(f' ???', end='   ')
     except AttributeError:
@@ -732,7 +881,10 @@ def drop_list(foe):
         return
     try:
         if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop3), foe.drop3).gotten:
-            print(f'{i18n.t(foe.drop3)} {Colors.GREEN}√{Colors.END}\n-----------------------')
+            if get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1) in accessory_items.values():
+                print(f'{i18n.t(foe.drop1)} ({get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).item_count}/{get_entity_by_name(get_dict_by_name(all_dicts, foe.drop1), foe.drop1).limit}) {Colors.GREEN}√{Colors.END}', end=' ')
+            else:
+                print(f'{i18n.t(foe.drop3)} {Colors.GREEN}√{Colors.END}\n-----------------------')
         else:
             print(f' ???\n-----------------------')
     except AttributeError:
@@ -742,9 +894,14 @@ def drop_list(foe):
 def show_gear_info(equipment, item_type):
     print('________________________________________')
     if item_type == '1':
-        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Element:") + f' {equipment.element}({format(equipment.element_percentage, ".0%")})')
+        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Element:") + f' {i18n.t(equipment.element)}({format(equipment.element_percentage, ".0%")})')
+    elif item_type in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']:
+        if equipment.name == "empty":
+            print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n')
+        else:
+            print(i18n.t('Current:') + f' {i18n.t(equipment.name)} ({equipment.item_count}/{equipment.limit})\n')
     else:
-        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Resistance:") + f' {equipment.element}({format(equipment.element_percentage, ".0%")})')
+        print(i18n.t('Current:') + f' {i18n.t(equipment.name)}\n' + i18n.t("Resistance:") + f' {i18n.t(equipment.element)}({format(equipment.element_percentage, ".0%")})')
     gear_info(equipment)
 
 
@@ -778,15 +935,28 @@ def gear_info(equipment):
                 print(f"LUC×{format(1 + value2, ".0%")}")
         elif value != 0 and value2 == 0:
             print('')
+    for i in range(1, 5):
+        attr_name = f'attri{i}'
+        special_items = getattr(equipment, attr_name)
+        if special_items.startswith("EXP"):
+            match = re.search(r'\d+\.?\d*', special_items)
+            print(f'EXP + {round(100 * float(match.group()))}%')
+        elif special_items.startswith("ENERGY"):
+            match = re.search(r'\d+\.?\d*', special_items)
+            print(f'ENERGY + {int(match.group())}')
     print('________________________________________')
 
 
 def purchase(equipment, item_type):
     global MONEY
     print('________________________________________')
-    print(f'{i18n.t(equipment.name)}: {equipment.element}({format(equipment.element_percentage, ".0%")})')
+    if not item_type in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']:
+        print(f'{i18n.t(equipment.name)}: {equipment.element}({format(equipment.element_percentage, ".0%")})')
     gear_info(equipment)
-    target = input(i18n.t("Do you want to buy") + f' {i18n.t(equipment.name)} ' + i18n.t("and equip it immediately? Cost:") + f"{Colors.YELLOW}{equipment.price} G{Colors.END} " + i18n.t("Gold:") + f"{Colors.YELLOW}{MONEY} G{Colors.END}\n[Y/N]")
+    if equipment.price > MONEY:
+        target = input(i18n.t("Do you want to buy") + f' {i18n.t(equipment.name)} ' + i18n.t("and equip it immediately? Cost:") + f"{Colors.RED}{equipment.price} G{Colors.END} " + i18n.t("Gold:") + f"{Colors.YELLOW}{MONEY} G{Colors.END}\n[Y/N]")
+    else:
+        target = input(i18n.t("Do you want to buy") + f' {i18n.t(equipment.name)} ' + i18n.t("and equip it immediately? Cost:") + f"{Colors.GREEN}{equipment.price} G{Colors.END} " + i18n.t("Gold:") + f"{Colors.YELLOW}{MONEY} G{Colors.END}\n[Y/N]")
     print("=" * 30)
     if target == 'y' and equipment.price <= MONEY:
         equipment.gotten = True
@@ -841,6 +1011,15 @@ def list_gear(item_dict):
                     print(f"DEX×{format(1 + value2, ".0%")}", end='  ')
                 elif i == 5:
                     print(f"LUC×{format(1 + value2, ".0%")}", end='  ')
+        for i in range(1, 5):
+            attr_name = f'attri{i}'
+            special_items = getattr(data, attr_name)
+            if special_items.startswith("EXP"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                print(f'EXP + {round(100 * float(match.group()))}%', end='  ')
+            elif special_items.startswith("ENERGY"):
+                match = re.search(r'\d+\.?\d*', special_items)
+                print(f'ENERGY + {int(match.group())}', end='  ')
         if (not data.gotten) and data.price != 0:
             if data.price > MONEY:
                 print(f'{Colors.RED}€:{data.price} G{Colors.END}')
@@ -853,6 +1032,14 @@ def list_gear(item_dict):
 
 def enter_shop(listed, item, target):
     if get_entity_by_id(listed, item).gotten:
+        if target in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']:
+            acc_count = 0
+            for i in [acc1OnUse, acc2OnUse, acc3OnUse, acc4OnUse, acc5OnUse, acc6OnUse]:
+                if i == get_entity_by_id(listed, item):
+                    acc_count += 1
+                if (acc_count >= get_entity_by_id(listed, item).limit) or (acc_count >= get_entity_by_id(listed, item).item_count):
+                    print(i18n.t("You can't equip this more than" + f"{get_entity_by_id(listed, item).item_count}" + "!"))
+                    return
         switch_to_gear(get_entity_by_id(listed, item), target)
         print("=" * 30)
         print(i18n.t('Switched to ') + f'{i18n.t(get_entity_by_id(listed, item).name)}' + i18n.t(' successfully!'))
@@ -867,11 +1054,11 @@ def enter_shop(listed, item, target):
 
 def bonus_initialization():
     foe_sorted_keys = sorted(enemies_dict.keys())
-    print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+    print('☆' * 30)
     for index, key in enumerate(foe_sorted_keys):
         map_bonus_generator(enemies_dict[key])
         get_map_bonus(enemies_dict[key])
-    print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
+    print('☆' * 30)
     return foe_sorted_keys
 
 
@@ -912,7 +1099,148 @@ def allocation_menu():
     print(f'DP: {baseDP}({playerDP})')
     print(f'DEX:{baseDEX}({playerDEX})')
     print(f'LUC:{baseLUC}({playerLUC})')
-    point_allocator()
+    point_allocator(autoAllocationStrategy, False)
+
+
+def accessory_menu():
+    global MONEY, slot1, slot2, slot3, slot4, slot5, slot6
+    while True:
+        print("=" * 30)
+        count = 0
+        for i, current in zip([slot1, slot2, slot3, slot4, slot5, slot6], [acc1OnUse, acc2OnUse, acc3OnUse, acc4OnUse, acc5OnUse, acc6OnUse]):
+            count += 1
+            if i == 0:
+                print(str(count) + ': ' + i18n.t("SLOT") + ' ' + str(count) + ' ' + f" {i18n.t(current.name)}")
+            else:
+                if MONEY > i:
+                    print(str(count) + ': ' + i18n.t("SLOT") + ' ' + str(count) + ' ' + f" {Colors.GREEN}€:{i} G{Colors.END}")
+                else:
+                    print(str(count) + ': ' + i18n.t("SLOT") + ' ' + str(count) + ' ' + f" {Colors.RED}€:{i} G{Colors.END}")
+        print(i18n.t("7: RETURN"))
+        print("=" * 30)
+        target = input(i18n.t("Choose: ")).strip()
+        if target == '1':
+            target = 'a1'
+            show_gear_info(acc1OnUse, target)
+            list_gear(accessory_items)
+            targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+            enter_shop(accessory_items, targeted_acc, target)
+            continue
+        elif target == '2':
+            if slot2 == 0:
+                target = 'a2'
+                show_gear_info(acc2OnUse, target)
+                list_gear(accessory_items)
+                targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+                enter_shop(accessory_items, targeted_acc, target)
+            else:
+                if MONEY >= slot2:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 2 ?' + f" {Colors.GREEN}€:{slot2} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                else:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 2 ?' + f" {Colors.RED}€:{slot2} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                choose = input("[Y/N]").strip()
+                if choose == 'y':
+                    if MONEY > slot2:
+                        MONEY -= slot2
+                        slot2 = 0
+                        save_manager.save_game()
+                        print(i18n.t("SLOT 2 is unlocked!"))
+                    else:
+                        print(i18n.t("Short of GOLD!"))
+            continue
+        elif target == '3':
+            if slot3 == 0:
+                target = 'a3'
+                show_gear_info(acc3OnUse, target)
+                list_gear(accessory_items)
+                targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+                enter_shop(accessory_items, targeted_acc, target)
+            else:
+                if MONEY >= slot3:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 3 ?' + f" {Colors.GREEN}€:{slot3} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                else:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 3 ?' + f" {Colors.RED}€:{slot3} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                choose = input("[Y/N]").strip()
+                if choose == 'y':
+                    if MONEY > slot3:
+                        MONEY -= slot3
+                        slot3 = 0
+                        save_manager.save_game()
+                        print(i18n.t("SLOT 3 is unlocked!"))
+                    else:
+                        print(i18n.t("Short of GOLD!"))
+            continue
+        elif target == '4':
+            if slot4 == 0:
+                target = 'a4'
+                show_gear_info(acc4OnUse, target)
+                list_gear(accessory_items)
+                targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+                enter_shop(accessory_items, targeted_acc, target)
+            else:
+                if MONEY >= slot4:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 4 ?' + f" {Colors.GREEN}€:{slot4} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                else:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 4 ?' + f" {Colors.RED}€:{slot4} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                choose = input("[Y/N]").strip()
+                if choose == 'y':
+                    if MONEY > slot4:
+                        MONEY -= slot4
+                        slot4 = 0
+                        save_manager.save_game()
+                        print(i18n.t("SLOT 4 is unlocked!"))
+                    else:
+                        print(i18n.t("Short of GOLD!"))
+            continue
+        elif target == '5':
+            if slot5 == 0:
+                target = 'a5'
+                show_gear_info(acc5OnUse, target)
+                list_gear(accessory_items)
+                targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+                enter_shop(accessory_items, targeted_acc, target)
+            else:
+                if MONEY >= slot5:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 5 ?' + f" {Colors.GREEN}€:{slot5} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                else:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 5 ?' + f" {Colors.RED}€:{slot5} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                choose = input("[Y/N]").strip()
+                if choose == 'y':
+                    if MONEY > slot5:
+                        MONEY -= slot5
+                        slot5 = 0
+                        save_manager.save_game()
+                        print(i18n.t("SLOT 5 is unlocked!"))
+                    else:
+                        print(i18n.t("Short of GOLD!"))
+            continue
+        elif target == '6':
+            if slot6 == 0:
+                target = 'a6'
+                show_gear_info(acc6OnUse, target)
+                list_gear(accessory_items)
+                targeted_acc = input(i18n.t("Input accessory ID you gonna swap, or purchase(001/002...):")).strip()
+                enter_shop(accessory_items, targeted_acc, target)
+            else:
+                if MONEY >= slot6:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 6 ?' + f" {Colors.GREEN}€:{slot6} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                else:
+                    print(i18n.t("Do you want to unlock SLOT") + ' 6 ?' + f" {Colors.RED}€:{slot6} G{Colors.END} " + i18n.t("Current:") + f' {Colors.YELLOW}{MONEY} G{Colors.END}')
+                choose = input("[Y/N]").strip()
+                if choose == 'y':
+                    if MONEY > slot6:
+                        MONEY -= slot6
+                        slot6 = 0
+                        save_manager.save_game()
+                        print(i18n.t("SLOT 6 is unlocked!"))
+                    else:
+                        print(i18n.t("Short of GOLD!"))
+            continue
+        elif target == '7':
+            break
+        else:
+            print(i18n.t("Invalid Choice!"))
+            continue
 
 
 def equipment_menu():
@@ -924,7 +1252,8 @@ def equipment_menu():
         print(i18n.t("4: HAND") + "   " + f"{i18n.t(gloveOnUse.name)}")
         print(i18n.t("5: SHIELD") + " " + f"{i18n.t(shieldOnUse.name)}")
         print(i18n.t("6: FOOT") + "   " + f"{i18n.t(footOnUse.name)}")
-        print(i18n.t("7: RETURN"))
+        print(i18n.t("7: ACCESSORY"))
+        print(i18n.t("8: RETURN"))
         print("=" * 30)
         target = input(i18n.t("Choose: ")).strip()
         if target == '1':
@@ -964,20 +1293,51 @@ def equipment_menu():
             enter_shop(foot_items, targeted_boots, target)
             continue
         elif target == '7':
+            accessory_menu()
+            continue
+        elif target == '8':
             break
         else:
             print(i18n.t("Invalid Choice!"))
             continue
 
 
+def game_over():
+    while True:
+        print("\n" + "=" * 30)
+        print(i18n.t("1: NEW RUN"))
+        print(i18n.t("2: EQUIPMENT"))
+        print(i18n.t("3: MENU"))
+        print("=" * 30)
+        choice = input(i18n.t("Choose: "))
+        if choice == "1":
+            revive()
+            save_manager.save_game()
+            main_program()
+        elif choice == "2":
+            equipment_menu()
+            if energy > 0:
+                return choice
+        elif choice == "3":
+            return choice
+        else:
+            print(i18n.t("Invalid Choice!"))
+        continue
+
+
 def player_action():
-    global energy, bossDefeated
+    global base_energy, bossDefeated
     print("")
     bonus_delete()
     foe_sorted_keys = bonus_initialization()
     while True:
         refresh_player()
-        print(i18n.t('Your energy: ') + f'{Colors.YELLOW}{energy} ⚡{Colors.END}')
+        if energy <= 0:
+            print(i18n.t("You run out of" + f'{Colors.YELLOW} ⚡{Colors.END}' + "!"))
+            if game_over() == '3':
+                save_manager.save_game()
+                break
+        print(i18n.t('Your energy: ') + f'{Colors.YELLOW}{energy} ⚡{Colors.END}  ' + i18n.t('Your Level: ') + f'{Colors.BOLD}LV{level}{Colors.END}')
         print("=" * 30)
         print(i18n.t("FOE ID(001/002): FIGHT") + '\n' + i18n.t("2: OPTION"))
         print("=" * 30)
@@ -996,53 +1356,45 @@ def player_action():
             battle_result = battle_simulator(playerAP, playerDP, playerHP, get_entity_by_id(enemies_dict, target))
             if battle_result == 'win':
                 if get_entity_by_id(enemies_dict, target).is_boss:
-                    energy += 2
+                    base_energy += 2
                     bossDefeated.append(get_entity_by_id(enemies_dict, target).foe_id)
+                    refresh_player()
                     print(i18n.t('Gain') + f' 2{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
                 else:
-                    energy -= 1
+                    base_energy -= 1
+                    refresh_player()
                     print(i18n.t('Consume') + f' 1{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
                 drop_manager(get_entity_by_id(enemies_dict, target))
                 print('________________________________________')
+                save_manager.save_game()
                 if temp_level == level:
                     pass
                 else:
-                    if allocation_after_battle:
-                        point_allocator()
+                    if autoAllocationStrategy != '0 0 0 0 0':
+                        point_allocator(autoAllocationStrategy, True)
+                    elif allocation_after_battle:
+                        point_allocator('0 0 0 0 0', False)
                 if get_entity_by_id(enemies_dict, target).foe_id in bossDefeated:
-                    pass
+                    get_entity_by_id(enemies_dict, target).foe_bonus = 'no_bonus'
                 else:
                     reset_bonus(get_entity_by_id(enemies_dict, target))
                 save_manager.save_game()
             elif battle_result == 'lose':
-                energy -= 3
+                base_energy -= 3
+                refresh_player()
                 print(i18n.t('Lose') + f' 3{Colors.YELLOW} ⚡{Colors.END}! ' + i18n.t('Current:') + f'{energy}{Colors.YELLOW} ⚡{Colors.END}')
                 save_manager.save_game()
             else:
                 save_manager.save_game()
                 continue
+            refresh_player()
             if energy <= 0:
                 print(i18n.t("You run out of energy!"))
                 print(i18n.t('Score: Highest LEVEL: ') + f'{Colors.CYAN}{level}{Colors.END} !')
                 save_manager.save_game()
-                choice = input(i18n.t("Choose: "))
-                print("\n" + "=" * 30)
-                print(i18n.t("1: NEW RUN"))
-                print(i18n.t("2: EQUIPMENT"))
-                print(i18n.t("3: MENU"))
-                print("=" * 30)
-                while True:
-                    if choice == "1":
-                        revive()
-                        save_manager.save_game()
-                        main_program()
-                    elif choice == "2":
-                        equipment_menu()
-                    elif choice == "3":
-                        show_menu()
-                    else:
-                        print(i18n.t("Invalid Choice!"))
-                    continue
+                if game_over() == '3':
+                    save_manager.save_game()
+                    break
             print('☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆')
             for index, key in enumerate(foe_sorted_keys):
                 get_map_bonus(enemies_dict[key])
@@ -1053,13 +1405,13 @@ def player_action():
 
 
 def revive():
-    global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, MONEY, energy, EXP, bossDefeated
+    global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, MONEY, base_energy, EXP, bossDefeated
     level = 1
     baseHP = 100
     baseAP, baseDP = 15, 15
-    baseDEX, baseLUC = 10, 10
+    baseDEX, baseLUC = 5, 5
     SP, MONEY, EXP = 0, 0, 0
-    energy = 25
+    base_energy = 25
     bossDefeated = []
 
 
@@ -1170,7 +1522,7 @@ class GameSaveManager:
             'baseLUC': baseLUC,
             'SP': SP,
             'MONEY': MONEY,
-            'energy': energy,
+            'base_energy': base_energy,
             'EXP': EXP,
             'allocation_after_battle': allocation_after_battle,
             'weaponOnUse' : weaponOnUse,
@@ -1179,10 +1531,24 @@ class GameSaveManager:
             'gloveOnUse' : gloveOnUse,
             'shieldOnUse' : shieldOnUse,
             'footOnUse' : footOnUse,
+            'acc1OnUse' : acc1OnUse,
+            'acc2OnUse' : acc2OnUse,
+            'acc3OnUse' : acc3OnUse,
+            'acc4OnUse' : acc4OnUse,
+            'acc5OnUse' : acc5OnUse,
+            'acc6OnUse' : acc6OnUse,
+            'slot1': slot1,
+            'slot2': slot2,
+            'slot3': slot3,
+            'slot4': slot4,
+            'slot5': slot5,
+            'slot6': slot6,
             'languages' : languages,
-            'bossDefeated' : bossDefeated
+            'bossDefeated' : bossDefeated,
+            'autoAllocationStrategy': autoAllocationStrategy
         }
 
+        accessory_data = accessory_items.copy()
         weapon_data = weapon_items.copy()
         torso_data = torso_items.copy()
         leg_data = leg_items.copy()
@@ -1193,6 +1559,7 @@ class GameSaveManager:
 
         save_data = {
             'main_data': main_vars,
+            'accessory_data': accessory_data,
             'weapon_data': weapon_data,
             'torso_data': torso_data,
             'leg_data': leg_data,
@@ -1248,7 +1615,8 @@ class GameSaveManager:
 
     @staticmethod
     def apply_save_data(save_data):
-        global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, EXP, MONEY, energy, allocation_after_battle, weaponOnUse,torsoOnUse, gloveOnUse, shieldOnUse, footOnUse, legOnUse, languages, bossDefeated
+        global level, baseHP, baseAP, baseDP, baseDEX, baseLUC, SP, EXP, MONEY, base_energy, allocation_after_battle, weaponOnUse,torsoOnUse, gloveOnUse, shieldOnUse, footOnUse, legOnUse, languages, bossDefeated, autoAllocationStrategy
+        global acc1OnUse, acc2OnUse, acc3OnUse, acc4OnUse, acc5OnUse, acc6OnUse, slot1, slot2, slot3, slot4, slot5, slot6
         if not save_data:
             return False
 
@@ -1263,7 +1631,7 @@ class GameSaveManager:
             SP = main_data['SP']
             EXP = main_data['EXP']
             MONEY = main_data['MONEY']
-            energy = main_data['energy']
+            base_energy = main_data['base_energy']
             allocation_after_battle = main_data['allocation_after_battle']
             languages = main_data['languages']
             weaponOnUse = main_data['weaponOnUse']
@@ -1272,8 +1640,24 @@ class GameSaveManager:
             legOnUse = main_data['legOnUse']
             shieldOnUse = main_data['shieldOnUse']
             footOnUse = main_data['footOnUse']
+            acc1OnUse = main_data['acc1OnUse']
+            acc2OnUse = main_data['acc2OnUse']
+            acc3OnUse = main_data['acc3OnUse']
+            acc4OnUse = main_data['acc4OnUse']
+            acc5OnUse = main_data['acc5OnUse']
+            acc6OnUse = main_data['acc6OnUse']
+            slot1 = main_data['slot1']
+            slot2 = main_data['slot2']
+            slot3 = main_data['slot3']
+            slot4 = main_data['slot4']
+            slot5 = main_data['slot5']
+            slot6 = main_data['slot6']
             bossDefeated = main_data['bossDefeated']
+            autoAllocationStrategy = main_data['autoAllocationStrategy']
 
+
+            accessory_items.clear()
+            accessory_items.update(save_data['accessory_data'])
             weapon_items.clear()
             weapon_items.update(save_data['weapon_data'])
             torso_items.clear()
