@@ -25,9 +25,10 @@ class Shield:
 shield_items = {
     '000': Shield("bare", '000', True, 'none', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 0),
     '001': Shield("couch-grass lid", '001', False, 'none', 0, 20, 0, 5, 0, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 0),
-    '002': Shield("shattered wooden shield", '002', False, 'piercing', 0.2, 60, 0, 10, 0, 0, 0.05, 0, 0.05, 0, 0, 'none', 'none', 'none', 'none', 2000),
+    '002': Shield("shattered wooden shield", '002', False, 'piercing', 0.2, 60, 0, 10, 0, 0, 0.05, 0, 0.05, 0, 0, 'none', 'none', 'none', 'none', 300),
     '003': Shield("softwood round shield", '003', False, 'piercing', 0.2, 100, 0, 0, 0, 0, 0.15, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 0),
-    '004': Shield("copper shield", '004', False, 'Fire', -0.4, 180, 0, 50, 0, 0, 0.2, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 0),
-    '005': Shield("iron shield", '005', False, 'slashing', 0.2, 400, 0, 100, 0, 0, 0.2, 0, 0.3, 0, 0, 'none', 'none', 'none', 'none', 15000),
+    '004': Shield("copper shield", '004', False, 'fire', -0.4, 180, 0, 50, 0, 0, 0.2, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 0),
+    '005': Shield("iron shield", '005', False, 'slashing', 0.2, 400, 0, 100, 0, 0, 0.2, 0, 0.3, 0, 0, 'none', 'none', 'none', 'none', 25000),
     '006': Shield("steel shield", '006', False, 'slashing', 0.3, 500, 0, 200, 0, 0, 0.4, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 60000),
+    '007': Shield("life wood shield", '007', False, 'holy', 0.5, 1200, 0, 150, 0, 0, 0.4, 0, 0.2, 0, 0, 'none', 'none','none', 'none', 0),
 }

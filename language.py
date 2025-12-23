@@ -30,6 +30,7 @@ class Language:
                 " for torso equipment)!": " for torso equipment)!",
                 "Score: Highest LEVEL: ": "Score: Highest LEVEL: ",
                 "You run out of": "You run out of",
+                "You run out of energy!": "You run out of energy!",
                 "Lose": "Lose",
                 "Consume": "Consume",
                 "Gain": "Gain",
@@ -161,6 +162,7 @@ class Language:
                 "Short of GOLD!": "Short of GOLD!",
                 "empty": "empty",
                 'Your Level: ': 'Your Level: ',
+                "Drop rate:": "Drop rate:",
 
                 "green slime": "green slime",
                 "dwarf": "dwarf",
@@ -316,6 +318,7 @@ class Language:
                 " for torso equipment)!": " 代表躯干部位的装备)!",
                 "Score: Highest LEVEL: ": "分数: 最高等级: ",
                 "You run out of": "你消耗完了",
+                "You run out of energy!": "你没能量了!",
                 "Lose": "失去",
                 "Consume": "消耗",
                 "Gain": "获得",
@@ -447,6 +450,7 @@ class Language:
                 "Short of GOLD!": "你的钱不够!",
                 "empty": "空",
                 'Your Level: ': '你的等级: ',
+                "Drop rate:": "掉落率:",
 
                 "green slime": "绿史莱姆",
                 "dwarf": "矮人",

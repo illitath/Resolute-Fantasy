@@ -213,6 +213,11 @@ def battle_simulator(player_ap, player_dp, player_hp, foe):
     damage_rate = round((player_ap * ap_bonus + (0.028 * foe_dp)) * 100 / (player_ap * ap_bonus + (0.557 * foe_dp)))
     print(i18n.t('Damage Rate:') + f' {damage_rate}% ' + i18n.t('Damage Reduction:') + f' {reduction_rate}%')
     battle_predictor(foe)
+    if foe.is_boss:
+        if_boss = math.log(2 * foe.foe_level, 10)
+    else:
+        if_boss = 1
+    print(i18n.t("Drop rate:") + f'{format(0.2 * (foe.foe_level ** -0.1) * math.log(2 * playerLUC, 10) * if_boss / (1 + 0.01 * math.log(10 + foe.foe_level, 10)), ".1%")}')
     drop_list(foe)
     while True:
         try:
@@ -642,7 +647,7 @@ def switch_to_gear(equipment, item_type):
     if item_type == '1':
         temp_element = equipment.element
         if not temp_element == weaponOnUse.element:
-            print(i18n.t('weapon element:') + f' {i18n.t(weaponOnUse.element)}({format(weaponOnUse.element_percentage, ".0%")}%) ----> {i18n.t(equipment.element)}({format(equipment.element_percentage, ".0%")}%)')
+            print(i18n.t('weapon element:') + f' {i18n.t(weaponOnUse.element)}({format(weaponOnUse.element_percentage, ".0%")}) ----> {i18n.t(equipment.element)}({format(equipment.element_percentage, ".0%")})')
         weaponOnUse = equipment
     elif item_type == '2':
         torsoOnUse = equipment
@@ -780,9 +785,9 @@ def refresh_player():
 
 
 def drop_manager(foe):
-    drop_chance = 0.15 * (foe.foe_level ** -0.1) * math.log(80 * playerLUC, 800)
+    drop_chance = 0.2 * (foe.foe_level ** -0.1) * math.log(2 * playerLUC, 10) / (1 + 0.01 * math.log(10 + foe.foe_level, 10))
     if foe.is_boss:
-        drop_chance *= 6
+        drop_chance *= 2 * math.log(2 * foe.foe_level, 10)
     if drop_chance > 1:
         drop_chance = 1
     elif drop_chance < 0:
@@ -1568,7 +1573,7 @@ class GameSaveManager:
             'foot_data': foot_data,
             'enemy_data': enemy_data,
             'save_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'version': '1.1'
+            'version': '1.2'
         }
         return save_data
 

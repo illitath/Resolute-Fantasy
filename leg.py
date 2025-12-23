@@ -25,9 +25,10 @@ class Leg:
 leg_items = {
     '000': Leg("pants", '000', True, 'none', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 0),
     '001': Leg("scotland skirt", '001', False, 'none', 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 0),
-    '002': Leg("casual trousers", '002', False, 'bludgeoning', 0.2, 20, 0, 10, 5, 0, 0, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 1200),
-    '003': Leg("leather pants", '003', False, 'bludgeoning', 0.2, 0, 0, 40, 5, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 2100),
-    '004': Leg("shin guard", '004', False, 'piercing', 0.2, 0, 0, 20, 50, 0, 0, 0.1, 0.2, 0.1, 0, 'none', 'none', 'none', 'none', 3000),
+    '002': Leg("casual trousers", '002', False, 'bludgeoning', 0.2, 20, 0, 10, 5, 0, 0, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 1800),
+    '003': Leg("leather pants", '003', False, 'bludgeoning', 0.2, 0, 0, 40, 5, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 4000),
+    '004': Leg("shin guard", '004', False, 'piercing', 0.2, 0, 0, 20, 50, 0, 0, 0.1, 0.2, 0.1, 0, 'none', 'none', 'none', 'none', 6000),
     '005': Leg("soft lapboard", '005', False, 'bludgeoning', 0.2, 80, 0, 100, 0, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 0),
     '006': Leg("fiber legging", '006', False, 'none', 0, 0, 0, 250, 40, 0, 0, 0, 0.4, 0, 0, 'none', 'none', 'none', 'none', 0),
+    '007': Leg("legplate", '007', False, 'slashing', 0.5, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 0),
 }

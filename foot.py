@@ -27,7 +27,8 @@ foot_items = {
     '001': Foot("cloth shoes", '001', False, 'bludgeoning', 0.2, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 'none', 'none', 'none', 'none', 700),
     '002': Foot("rattan sandal", '002', False, 'none', 0, 0, 0, 10, 0, 0, 0, 0, 0.1, 0, 0, 'none', 'none', 'none', 'none', 0),
     '003': Foot("worn sneaker", '003', False, 'bludgeoning', 0.2, 0, 0, 20, 10, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 0),
-    '004': Foot("casual shoes", '004', False, 'none', 0, 0, 0, 20, 40, 0, 0, 0, 0.2, 0.1, 0, 'none', 'none', 'none', 'none', 6500),
-    '005': Foot("traveller boots", '005', False, 'slashing', 0.2, 50, 0, 60, 50, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 12000),
+    '004': Foot("casual shoes", '004', False, 'none', 0, 0, 0, 20, 40, 0, 0, 0, 0.2, 0.1, 0, 'none', 'none', 'none', 'none', 9500),
+    '005': Foot("traveller boots", '005', False, 'slashing', 0.2, 50, 0, 60, 50, 0, 0, 0, 0.2, 0, 0, 'none', 'none', 'none', 'none', 13000),
     '006': Foot("plate boots", '006', False, 'slashing', 0.4, 0, 0, 250, 0, 0, 0, 0, 0.25, 0, 0, 'none', 'none', 'none', 'none', 0),
+    '007': Foot("royal boots", '007', False, 'piercing', 0.2, 0, 0, 400, 0, 0, 0, 0, 0.3, 0.1, 0, 'none', 'none', 'none','none', 0)
 }
